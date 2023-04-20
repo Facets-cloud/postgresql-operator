@@ -18,14 +18,21 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/pramodh-ayyappan/database-operator/api/common"
+	"github.com/pramodh-ayyappan/database-operator/api/v1alpha1"
 	postgresv1alpha1 "github.com/pramodh-ayyappan/database-operator/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 )
+
+var logger = log.Log.WithName("role_controller")
 
 // RoleReconciler reconciles a Role object
 type RoleReconciler struct {
@@ -47,9 +54,30 @@ type RoleReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.14.1/pkg/reconcile
 func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	log := logger.WithValues("Request.Namespace", req.Namespace, "Request.Name", req.Name)
+
+	rs := &v1alpha1.Role{}
+	err := r.Get(ctx, req.NamespacedName, rs)
+	if err != nil {
+		return ctrl.Result{}, nil
+	}
+
+	secret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{
+		Namespace: rs.Spec.ConnectSecretRef.Namespace,
+		Name:      rs.Spec.ConnectSecretRef.Name,
+	}, secret)
+
+	endpoint := string(secret.Data[common.ResourceCredentialsSecretEndpointKey])
+	port := string(secret.Data[common.ResourceCredentialsSecretPortKey])
+	username := string(secret.Data[common.ResourceCredentialsSecretUserKey])
+	password := string(secret.Data[common.ResourceCredentialsSecretPasswordKey])
+
+	log.Info(fmt.Sprintf("current time in hour : %s\n", endpoint))
+	log.Info(fmt.Sprintf("current time in hour : %s\n", port))
+	log.Info(fmt.Sprintf("current time in hour : %s\n", username))
+	log.Info(fmt.Sprintf("current time in hour : %s\n", password))
 
 	return ctrl.Result{}, nil
 }

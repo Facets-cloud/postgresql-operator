@@ -16,9 +16,9 @@ spec:
     namespace: default
     name: db-conn
     key: role_password
-  sslMode: disabled # disable, allow, prefer, require, verify-ca, verify-full
+  sslMode: disable # disable, allow, prefer, require, verify-ca, verify-full
   connectionLimit: 100
-  priviliges:
+  privileges:
     bypassRls: false
     createDb: false
     createRole: false
