@@ -35,13 +35,94 @@ spec:
           spec:
             description: RoleSpec defines the desired state of Role
             properties:
-              foo:
-                description: Foo is an example field of Role. Edit role_types.go to
-                  remove/update
+              connectSecretRef:
+                description: ConnectSecretRef references the secret that contains
+                  database details () used to create this role.
+                properties:
+                  name:
+                    description: Name of the secret.
+                    type: string
+                  namespace:
+                    description: Namespace of the secret.
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
+              connectionLimit:
+                description: ConnectionLimit to be applied to the role.
+                format: int32
+                type: integer
+              passwordSecretRef:
+                description: PasswordSecretRef references the secret that contains
+                  the password used for this role.
+                properties:
+                  key:
+                    description: The key to select.
+                    type: string
+                  name:
+                    description: Name of the secret.
+                    type: string
+                  namespace:
+                    description: Namespace of the secret.
+                    type: string
+                required:
+                - key
+                - name
+                - namespace
+                type: object
+              privileges:
+                description: Privileges to be granted.
+                properties:
+                  bypassRls:
+                    description: BypassRls grants BYPASSRLS when true, allowing the
+                      role to bypass row-level security policies.
+                    type: boolean
+                  createDb:
+                    description: CreateDb grants CREATEDB when true, allowing the
+                      role to create databases.
+                    type: boolean
+                  createRole:
+                    description: CreateRole grants CREATEROLE when true, allowing
+                      this role to create other roles.
+                    type: boolean
+                  inherit:
+                    description: Inherit grants INHERIT when true, allowing the role
+                      to inherit permissions from other roles it is a member of.
+                    type: boolean
+                  login:
+                    description: Login grants LOGIN when true, allowing the role to
+                      login to the server.
+                    type: boolean
+                  replication:
+                    description: Replication grants REPLICATION when true, allowing
+                      the role to connect in replication mode.
+                    type: boolean
+                  superUser:
+                    description: SuperUser grants SUPERUSER privilege when true.
+                    type: boolean
+                type: object
+              sslMode:
+                default: disable
+                description: Defines the SSL mode used to set up a connection to the
+                  provided PostgreSQL instance
+                enum:
+                - disable
+                - allow
+                - prefer
+                - require
+                - verify-ca
+                - verify-full
                 type: string
             type: object
           status:
             description: RoleStatus defines the observed state of Role
+            properties:
+              status:
+                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                  of cluster Important: Run "make" to regenerate code after modifying
+                  this file'
+                type: string
             type: object
         type: object
     served: true

@@ -9,4 +9,20 @@ metadata:
     app.kubernetes.io/created-by: database-operator
   name: role-sample
 spec:
-  # TODO(user): Add fields here
+  connectSecretRef:
+    name: db-conn
+    namespace: default
+  passwordSecretRef:
+    namespace: default
+    name: db-conn
+    key: role_password
+  sslMode: disabled # disable, allow, prefer, require, verify-ca, verify-full
+  connectionLimit: 100
+  priviliges:
+    bypassRls: false
+    createDb: false
+    createRole: false
+    inherit: false
+    login: true
+    replication: false
+    superUser: false

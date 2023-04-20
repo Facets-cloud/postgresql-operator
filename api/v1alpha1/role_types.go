@@ -17,25 +17,81 @@ limitations under the License.
 package v1alpha1
 
 import (
+	common "github.com/pramodh-ayyappan/database-operator/api/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// RolePrivilege is the PostgreSQL identifier to add or remove a permission
+// on a role.
+// See https://www.postgresql.org/docs/current/sql-createrole.html for available privileges.
+type RolePrivilege struct {
+	// SuperUser grants SUPERUSER privilege when true.
+	// +optional
+	SuperUser *bool `json:"superUser,omitempty"`
+
+	// CreateDb grants CREATEDB when true, allowing the role to create databases.
+	// +optional
+	CreateDb *bool `json:"createDb,omitempty"`
+
+	// CreateRole grants CREATEROLE when true, allowing this role to create other roles.
+	// +optional
+	CreateRole *bool `json:"createRole,omitempty"`
+
+	// Login grants LOGIN when true, allowing the role to login to the server.
+	// +optional
+	Login *bool `json:"login,omitempty"`
+
+	// Inherit grants INHERIT when true, allowing the role to inherit permissions
+	// from other roles it is a member of.
+	// +optional
+	Inherit *bool `json:"inherit,omitempty"`
+
+	// Replication grants REPLICATION when true, allowing the role to connect in replication mode.
+	// +optional
+	Replication *bool `json:"replication,omitempty"`
+
+	// BypassRls grants BYPASSRLS when true, allowing the role to bypass row-level security policies.
+	// +optional
+	BypassRls *bool `json:"bypassRls,omitempty"`
+}
+
 // RoleSpec defines the desired state of Role
 type RoleSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// ConnectSecretRef references the secret that contains database details () used
+	// to create this role.
+	// +kubebuilder:validation:Required
+	ConnectSecretRef common.SecretReference `json:"connectSecretRef,omitempty"`
 
-	// Foo is an example field of Role. Edit role_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// PasswordSecretRef references the secret that contains the password used
+	// for this role.
+	// +kubebuilder:validation:Required
+	PasswordSecretRef common.SecretKeySelector `json:"passwordSecretRef,omitempty"`
+
+	// Defines the SSL mode used to set up a connection to the provided
+	// PostgreSQL instance
+	// +kubebuilder:validation:Enum=disable;allow;prefer;require;verify-ca;verify-full
+	// +kubebuilder:default=disable
+	// +kubebuilder:validation:Optional
+	SSLMode *string `json:"sslMode,omitempty"`
+
+	// ConnectionLimit to be applied to the role.
+	// +kubebuilder:validation:Min=-1
+	// +optional
+	ConnectionLimit *int32 `json:"connectionLimit,omitempty"`
+
+	// Privileges to be granted.
+	// +optional
+	Privileges RolePrivilege `json:"privileges,omitempty"`
 }
 
 // RoleStatus defines the observed state of Role
 type RoleStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	Status string `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
