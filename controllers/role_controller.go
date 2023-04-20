@@ -58,29 +58,39 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	log := logger.WithValues("Request.Namespace", req.Namespace, "Request.Name", req.Name)
 
-	rs := &v1alpha1.Role{}
-	err := r.Get(ctx, req.NamespacedName, rs)
+	role := &v1alpha1.Role{}
+	err := r.Get(ctx, req.NamespacedName, role)
 	if err != nil {
 		return ctrl.Result{}, nil
 	}
 
-	secret := &corev1.Secret{}
+	connectionSecret := &corev1.Secret{}
 	err = r.Get(ctx, types.NamespacedName{
-		Namespace: rs.Spec.ConnectSecretRef.Namespace,
-		Name:      rs.Spec.ConnectSecretRef.Name,
-	}, secret)
+		Namespace: role.Spec.ConnectSecretRef.Namespace,
+		Name:      role.Spec.ConnectSecretRef.Name,
+	}, connectionSecret)
 
-	endpoint := string(secret.Data[common.ResourceCredentialsSecretEndpointKey])
-	port := string(secret.Data[common.ResourceCredentialsSecretPortKey])
-	username := string(secret.Data[common.ResourceCredentialsSecretUserKey])
-	password := string(secret.Data[common.ResourceCredentialsSecretPasswordKey])
+	endpoint := string(connectionSecret.Data[common.ResourceCredentialsSecretEndpointKey])
+	port := string(connectionSecret.Data[common.ResourceCredentialsSecretPortKey])
+	username := string(connectionSecret.Data[common.ResourceCredentialsSecretUserKey])
+	password := string(connectionSecret.Data[common.ResourceCredentialsSecretPasswordKey])
 
-	log.Info(fmt.Sprintf("current time in hour : %s\n", endpoint))
-	log.Info(fmt.Sprintf("current time in hour : %s\n", port))
-	log.Info(fmt.Sprintf("current time in hour : %s\n", username))
-	log.Info(fmt.Sprintf("current time in hour : %s\n", password))
+	passwordSecret := &corev1.Secret{}
+	err = r.Get(
+		ctx, types.NamespacedName{
+			Namespace: role.Spec.PasswordSecretRef.Namespace,
+			Name:      role.Spec.PasswordSecretRef.Name,
+		},
+		passwordSecret,
+	)
 
-	return ctrl.Result{RequeueAfter: time.Duration(30 * time.Second)}, nil
+	log.Info(fmt.Sprintf("Endpoint : %s\n", endpoint))
+	log.Info(fmt.Sprintf("Port : %s\n", port))
+	log.Info(fmt.Sprintf("Username : %s\n", username))
+	log.Info(fmt.Sprintf("Password : %s\n", password))
+	log.Info(fmt.Sprintf("Role Password : %s\n", passwordSecret.Data[role.Spec.PasswordSecretRef.Key]))
+
+	return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

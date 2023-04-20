@@ -11,9 +11,9 @@ metadata:
 spec:
   connectSecretRef:
     name: db-conn
-    namespace: facets
+    namespace: default
   passwordSecretRef:
-    namespace: facets
+    namespace: default
     name: db-conn
     key: role_password
   sslMode: disable # disable, allow, prefer, require, verify-ca, verify-full
