@@ -50,9 +50,15 @@ spec:
                 - namespace
                 type: object
               connectionLimit:
+                default: 100
                 description: ConnectionLimit to be applied to the role.
                 format: int32
                 type: integer
+              defaultDatabase:
+                default: postgres
+                description: Defines the Default Database used to set up a connection
+                  to the provided PostgreSQL instance
+                type: string
               passwordSecretRef:
                 description: PasswordSecretRef references the secret that contains
                   the password used for this role.
@@ -75,30 +81,37 @@ spec:
                 description: Privileges to be granted.
                 properties:
                   bypassRls:
+                    default: false
                     description: BypassRls grants BYPASSRLS when true, allowing the
                       role to bypass row-level security policies.
                     type: boolean
                   createDb:
+                    default: false
                     description: CreateDb grants CREATEDB when true, allowing the
                       role to create databases.
                     type: boolean
                   createRole:
+                    default: false
                     description: CreateRole grants CREATEROLE when true, allowing
                       this role to create other roles.
                     type: boolean
                   inherit:
+                    default: false
                     description: Inherit grants INHERIT when true, allowing the role
                       to inherit permissions from other roles it is a member of.
                     type: boolean
                   login:
+                    default: true
                     description: Login grants LOGIN when true, allowing the role to
                       login to the server.
                     type: boolean
                   replication:
+                    default: false
                     description: Replication grants REPLICATION when true, allowing
                       the role to connect in replication mode.
                     type: boolean
                   superUser:
+                    default: false
                     description: SuperUser grants SUPERUSER privilege when true.
                     type: boolean
                 type: object

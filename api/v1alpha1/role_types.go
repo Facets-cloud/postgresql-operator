@@ -30,31 +30,38 @@ import (
 type RolePrivilege struct {
 	// SuperUser grants SUPERUSER privilege when true.
 	// +optional
+	// +kubebuilder:default=false
 	SuperUser *bool `json:"superUser,omitempty"`
 
 	// CreateDb grants CREATEDB when true, allowing the role to create databases.
 	// +optional
+	// +kubebuilder:default=false
 	CreateDb *bool `json:"createDb,omitempty"`
 
 	// CreateRole grants CREATEROLE when true, allowing this role to create other roles.
 	// +optional
+	// +kubebuilder:default=false
 	CreateRole *bool `json:"createRole,omitempty"`
 
 	// Login grants LOGIN when true, allowing the role to login to the server.
 	// +optional
+	// +kubebuilder:default=true
 	Login *bool `json:"login,omitempty"`
 
 	// Inherit grants INHERIT when true, allowing the role to inherit permissions
 	// from other roles it is a member of.
 	// +optional
+	// +kubebuilder:default=false
 	Inherit *bool `json:"inherit,omitempty"`
 
 	// Replication grants REPLICATION when true, allowing the role to connect in replication mode.
 	// +optional
+	// +kubebuilder:default=false
 	Replication *bool `json:"replication,omitempty"`
 
 	// BypassRls grants BYPASSRLS when true, allowing the role to bypass row-level security policies.
 	// +optional
+	// +kubebuilder:default=false
 	BypassRls *bool `json:"bypassRls,omitempty"`
 }
 
@@ -70,6 +77,12 @@ type RoleSpec struct {
 	// +kubebuilder:validation:Required
 	PasswordSecretRef common.SecretKeySelector `json:"passwordSecretRef,omitempty"`
 
+	// Defines the Default Database used to set up a connection to the provided
+	// PostgreSQL instance
+	// +kubebuilder:default=postgres
+	// +kubebuilder:validation:Optional
+	DefaultDatabase *string `json:"defaultDatabase,omitempty"`
+
 	// Defines the SSL mode used to set up a connection to the provided
 	// PostgreSQL instance
 	// +kubebuilder:validation:Enum=disable;allow;prefer;require;verify-ca;verify-full
@@ -80,6 +93,7 @@ type RoleSpec struct {
 	// ConnectionLimit to be applied to the role.
 	// +kubebuilder:validation:Min=-1
 	// +optional
+	// +kubebuilder:default=100
 	ConnectionLimit *int32 `json:"connectionLimit,omitempty"`
 
 	// Privileges to be granted.

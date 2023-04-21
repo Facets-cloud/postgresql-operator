@@ -27,13 +27,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"database/sql"
+
+	"github.com/go-logr/logr"
+	_ "github.com/lib/pq"
 	"github.com/pramodh-ayyappan/database-operator/api/common"
 	"github.com/pramodh-ayyappan/database-operator/api/v1alpha1"
 	postgresv1alpha1 "github.com/pramodh-ayyappan/database-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 )
 
-var logger = log.Log.WithName("role_controller")
+var (
+	logger = log.Log.WithName("role_controller")
+	db     *sql.DB
+)
 
 // RoleReconciler reconciles a Role object
 type RoleReconciler struct {
@@ -64,33 +71,30 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, nil
 	}
 
-	connectionSecret := &corev1.Secret{}
-	err = r.Get(ctx, types.NamespacedName{
-		Namespace: role.Spec.ConnectSecretRef.Namespace,
-		Name:      role.Spec.ConnectSecretRef.Name,
-	}, connectionSecret)
+	// Connect to Postgres DB
+	db, err = Connect(ctx, r, role, log)
+	if err != nil {
+		log.Error(err, "Failed connecting to database... Please check the connection details")
+	}
+	defer db.Close()
 
-	endpoint := string(connectionSecret.Data[common.ResourceCredentialsSecretEndpointKey])
-	port := string(connectionSecret.Data[common.ResourceCredentialsSecretPortKey])
-	username := string(connectionSecret.Data[common.ResourceCredentialsSecretUserKey])
-	password := string(connectionSecret.Data[common.ResourceCredentialsSecretPasswordKey])
+	// Ping database and check if connectivity is available
+	err = db.Ping()
+	if err != nil {
+		log.Error(err, "Pinging to database failed... Please check the connection details")
+	} else {
+		log.Info("Pinging database successful!!!")
+	}
 
-	passwordSecret := &corev1.Secret{}
-	err = r.Get(
-		ctx, types.NamespacedName{
-			Namespace: role.Spec.PasswordSecretRef.Namespace,
-			Name:      role.Spec.PasswordSecretRef.Name,
-		},
-		passwordSecret,
-	)
+	// Check if Role exists
+	isRoleExists := IsRoleExists(ctx, r, db, role, log)
+	if !isRoleExists {
+		log.Info(fmt.Sprintf("Creating Role: %s\n", role.Name))
+	} else {
+		log.Info(fmt.Sprintf("Role Already exists so skipping: %s\n", role.Name))
+	}
 
-	log.Info(fmt.Sprintf("Endpoint : %s\n", endpoint))
-	log.Info(fmt.Sprintf("Port : %s\n", port))
-	log.Info(fmt.Sprintf("Username : %s\n", username))
-	log.Info(fmt.Sprintf("Password : %s\n", password))
-	log.Info(fmt.Sprintf("Role Password : %s\n", passwordSecret.Data[role.Spec.PasswordSecretRef.Key]))
-
-	return ctrl.Result{RequeueAfter: time.Duration(5 * time.Second)}, nil
+	return ctrl.Result{RequeueAfter: time.Duration(30 * time.Second)}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -98,4 +102,80 @@ func (r *RoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&postgresv1alpha1.Role{}).
 		Complete(r)
+}
+
+func Connect(ctx context.Context, r *RoleReconciler, role *postgresv1alpha1.Role, log logr.Logger) (*sql.DB, error) {
+	connectionSecret := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{
+		Namespace: role.Spec.ConnectSecretRef.Namespace,
+		Name:      role.Spec.ConnectSecretRef.Name,
+	}, connectionSecret)
+	if err != nil {
+		log.Error(err,
+			fmt.Sprintf(
+				"Failed to get connection secret %s in namespace %s",
+				role.Spec.ConnectSecretRef.Name,
+				role.Spec.ConnectSecretRef.Namespace,
+			),
+		)
+	}
+
+	// endpoint := string(connectionSecret.Data[common.ResourceCredentialsSecretEndpointKey])
+	port := string(connectionSecret.Data[common.ResourceCredentialsSecretPortKey])
+	username := string(connectionSecret.Data[common.ResourceCredentialsSecretUserKey])
+	password := string(connectionSecret.Data[common.ResourceCredentialsSecretPasswordKey])
+	defaultDatabase := *role.Spec.DefaultDatabase
+
+	// log.Info(fmt.Sprintf("Endpoint : %s\n", endpoint))
+	// log.Info(fmt.Sprintf("Port : %s\n", port))
+	// log.Info(fmt.Sprintf("Username : %s\n", username))
+	// log.Info(fmt.Sprintf("Password : %s\n", password))
+	// log.Info(fmt.Sprintf("Role Password : %s\n", passwordSecret.Data[role.Spec.PasswordSecretRef.Key]))
+	// log.Info(fmt.Sprintf("Default Database : %s\n", defaultDatabase))
+
+	psqlInfo := fmt.Sprintf("host=%s port=%s user=%s "+
+		"password=%s dbname=%s sslmode=%s",
+		"127.0.0.1", // endpoint,
+		port,
+		username,
+		password,
+		defaultDatabase,
+		*role.Spec.SSLMode,
+	)
+
+	db, err := sql.Open("postgres", psqlInfo)
+
+	return db, err
+}
+
+func IsRoleExists(ctx context.Context, r *RoleReconciler, db *sql.DB, role *postgresv1alpha1.Role, log logr.Logger) bool {
+	var isRoleExists bool
+	selectRoleQuery := "SELECT EXISTS (SELECT 1 " +
+		"FROM pg_roles WHERE rolname = $1 " +
+		"AND rolsuper = $2 " +
+		"AND rolinherit = $3 " +
+		"AND rolcreaterole = $4 " +
+		"AND rolcreatedb = $5 " +
+		"AND rolcanlogin = $6 " +
+		"AND rolreplication = $7 " +
+		"AND rolconnlimit = $8 " +
+		"AND rolbypassrls = $9)"
+
+	err := db.QueryRow(
+		selectRoleQuery,
+		role.Name,
+		&role.Spec.Privileges.SuperUser,
+		&role.Spec.Privileges.Inherit,
+		&role.Spec.Privileges.CreateRole,
+		&role.Spec.Privileges.CreateDb,
+		&role.Spec.Privileges.Login,
+		&role.Spec.Privileges.Replication,
+		&role.Spec.ConnectionLimit,
+		&role.Spec.Privileges.BypassRls,
+	).Scan(&isRoleExists)
+	if err != nil {
+		log.Error(err, "Failed to get role...")
+	}
+
+	return isRoleExists
 }

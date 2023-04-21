@@ -14,7 +14,7 @@ const (
 	Success = "Success"
 
 	// Faield Status
-	Faileds = "Failed"
+	Failed = "Failed"
 )
 
 // A SecretReference is a reference to a secret in an arbitrary namespace.

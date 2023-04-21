@@ -139,6 +139,11 @@ func (in *RoleSpec) DeepCopyInto(out *RoleSpec) {
 	*out = *in
 	out.ConnectSecretRef = in.ConnectSecretRef
 	out.PasswordSecretRef = in.PasswordSecretRef
+	if in.DefaultDatabase != nil {
+		in, out := &in.DefaultDatabase, &out.DefaultDatabase
+		*out = new(string)
+		**out = **in
+	}
 	if in.SSLMode != nil {
 		in, out := &in.SSLMode, &out.SSLMode
 		*out = new(string)

@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/part-of: database-operator
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: database-operator
-  name: role-sample
+  name: rolesample
 spec:
   connectSecretRef:
     name: db-conn
@@ -16,13 +16,14 @@ spec:
     namespace: default
     name: db-conn
     key: role_password
+  defaultDatabase: postgres
   sslMode: disable # disable, allow, prefer, require, verify-ca, verify-full
-  connectionLimit: 100
+  connectionLimit: -1
   privileges:
     bypassRls: false
     createDb: false
     createRole: false
-    inherit: false
+    inherit: true
     login: true
     replication: false
     superUser: false
