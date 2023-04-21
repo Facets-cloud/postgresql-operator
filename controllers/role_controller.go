@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -86,12 +87,37 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		log.Info("Pinging database successful!!!")
 	}
 
-	// Check if Role exists
-	isRoleExists := IsRoleExists(ctx, r, db, role, log)
+	passwordSecret := &corev1.Secret{}
+	err = r.Get(
+		ctx, types.NamespacedName{
+			Namespace: role.Spec.PasswordSecretRef.Namespace,
+			Name:      role.Spec.PasswordSecretRef.Name,
+		},
+		passwordSecret,
+	)
+	if err != nil {
+		log.Error(err,
+			fmt.Sprintf(
+				"Failed to get password secret %s in namespace %s",
+				role.Spec.PasswordSecretRef.Name,
+				role.Spec.PasswordSecretRef.Namespace,
+			),
+		)
+	}
+
+	rolePassword := string(passwordSecret.Data[role.Spec.PasswordSecretRef.Key])
+
+	// Check if Role exists and create/alter role
+	isRoleExists, isObservedStateSame := IsRoleExists(ctx, r, db, role, log)
 	if !isRoleExists {
 		log.Info(fmt.Sprintf("Creating Role: %s\n", role.Name))
+		// Create Role
+		CreateRole(ctx, r, db, role, log, rolePassword)
+	} else if !isObservedStateSame {
+		log.Info(fmt.Sprintf("Observed that the state of role `%s` is different. Started role sync!!!", role.Name))
+		SyncRole(ctx, r, db, role, log, rolePassword)
 	} else {
-		log.Info(fmt.Sprintf("Role Already exists so skipping: %s\n", role.Name))
+		log.Info(fmt.Sprintf("Role `%s` already exists so skipping\n", role.Name))
 	}
 
 	return ctrl.Result{RequeueAfter: time.Duration(30 * time.Second)}, nil
@@ -148,34 +174,107 @@ func Connect(ctx context.Context, r *RoleReconciler, role *postgresv1alpha1.Role
 	return db, err
 }
 
-func IsRoleExists(ctx context.Context, r *RoleReconciler, db *sql.DB, role *postgresv1alpha1.Role, log logr.Logger) bool {
+func IsRoleExists(ctx context.Context, r *RoleReconciler, db *sql.DB, role *postgresv1alpha1.Role, log logr.Logger) (bool, bool) {
 	var isRoleExists bool
+	var isObservedStateSame bool
 	selectRoleQuery := "SELECT EXISTS (SELECT 1 " +
-		"FROM pg_roles WHERE rolname = $1 " +
-		"AND rolsuper = $2 " +
-		"AND rolinherit = $3 " +
-		"AND rolcreaterole = $4 " +
-		"AND rolcreatedb = $5 " +
-		"AND rolcanlogin = $6 " +
-		"AND rolreplication = $7 " +
-		"AND rolconnlimit = $8 " +
-		"AND rolbypassrls = $9)"
+		"FROM pg_roles WHERE rolname = $1 )"
 
+	// Check if Role exists
 	err := db.QueryRow(
 		selectRoleQuery,
 		role.Name,
-		&role.Spec.Privileges.SuperUser,
-		&role.Spec.Privileges.Inherit,
-		&role.Spec.Privileges.CreateRole,
-		&role.Spec.Privileges.CreateDb,
-		&role.Spec.Privileges.Login,
-		&role.Spec.Privileges.Replication,
-		&role.Spec.ConnectionLimit,
-		&role.Spec.Privileges.BypassRls,
 	).Scan(&isRoleExists)
 	if err != nil {
-		log.Error(err, "Failed to get role...")
+		log.Error(err, fmt.Sprintf("Failed to get role `%s`", role.Name))
 	}
 
-	return isRoleExists
+	// Check if the state of Role changed
+	if isRoleExists {
+		observeRoleStateQuery := "SELECT EXISTS (SELECT 1 " +
+			"FROM pg_roles WHERE rolname = $1 " +
+			"AND rolsuper = $2 " +
+			"AND rolinherit = $3 " +
+			"AND rolcreaterole = $4 " +
+			"AND rolcreatedb = $5 " +
+			"AND rolcanlogin = $6 " +
+			"AND rolreplication = $7 " +
+			"AND rolconnlimit = $8 " +
+			"AND rolbypassrls = $9)"
+
+		err := db.QueryRow(
+			observeRoleStateQuery,
+			role.Name,
+			&role.Spec.Privileges.SuperUser,
+			&role.Spec.Privileges.Inherit,
+			&role.Spec.Privileges.CreateRole,
+			&role.Spec.Privileges.CreateDb,
+			&role.Spec.Privileges.Login,
+			&role.Spec.Privileges.Replication,
+			&role.Spec.ConnectionLimit,
+			&role.Spec.Privileges.BypassRls,
+		).Scan(&isObservedStateSame)
+		if err != nil {
+			log.Error(err, fmt.Sprintf("Failed to get role `%s`", role.Name))
+		}
+	}
+
+	return isRoleExists, isObservedStateSame
+}
+
+func CreateRole(ctx context.Context, r *RoleReconciler, db *sql.DB, role *postgresv1alpha1.Role, log logr.Logger, rolePassword string) bool {
+	privileges := strings.Join(PrivilegesToClauses(role.Spec.Privileges), " ")
+
+	createRoleQuery := fmt.Sprintf("CREATE ROLE %s WITH %s PASSWORD '%s'", role.Name, privileges, rolePassword)
+	_, execErr := db.Exec(createRoleQuery)
+	if execErr != nil {
+		log.Error(execErr, fmt.Sprintf("Failed to create role `%s`", role.Name))
+		return false
+	}
+
+	log.Info(fmt.Sprintf("Role `%s` got created successfully", role.Name))
+	return true
+}
+
+func SyncRole(ctx context.Context, r *RoleReconciler, db *sql.DB, role *postgresv1alpha1.Role, log logr.Logger, rolePassword string) bool {
+	privileges := strings.Join(PrivilegesToClauses(role.Spec.Privileges), " ")
+
+	createRoleQuery := fmt.Sprintf("ALTER ROLE %s WITH %s PASSWORD '%s'", role.Name, privileges, rolePassword)
+	_, execErr := db.Exec(createRoleQuery)
+	if execErr != nil {
+		log.Error(execErr, fmt.Sprintf("Failed to sync role `%s`", role.Name))
+		return false
+	}
+
+	log.Info(fmt.Sprintf("Role `%s` got synced successfully", role.Name))
+	return true
+}
+
+func NegateClause(clause string, negate *bool, out *[]string) {
+	// If clause boolean is not set (nil pointer), do not push a setting.
+	// This means the postgres default is applied.
+	if negate == nil {
+		return
+	}
+
+	if !(*negate) {
+		clause = "NO" + clause
+	}
+	*out = append(*out, clause)
+}
+
+func PrivilegesToClauses(p postgresv1alpha1.RolePrivilege) []string {
+	// Never copy user inputted data to this string. These values are
+	// passed directly into the query.
+	pc := []string{}
+
+	NegateClause("SUPERUSER", p.SuperUser, &pc)
+	NegateClause("INHERIT", p.Inherit, &pc)
+	NegateClause("CREATEDB", p.CreateDb, &pc)
+	NegateClause("CREATEROLE", p.CreateRole, &pc)
+	NegateClause("LOGIN", p.Login, &pc)
+	NegateClause("REPLICATION", p.Replication, &pc)
+	NegateClause("BYPASSRLS", p.BypassRls, &pc)
+
+	return pc
 }

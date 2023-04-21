@@ -23,7 +23,7 @@ spec:
     bypassRls: false
     createDb: false
     createRole: false
-    inherit: true
+    inherit: false
     login: true
     replication: false
     superUser: false
