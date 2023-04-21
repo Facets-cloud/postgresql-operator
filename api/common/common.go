@@ -10,11 +10,14 @@ const (
 	// ResourceCredentialsSecretPasswordKey is the key inside a connection secret for the connection password
 	ResourceCredentialsSecretPasswordKey = "password"
 
-	// Success Status
-	Success = "Success"
+	// Created Status
+	CREATED = "Created"
+
+	// Synced Status
+	SYNCED = "Synced"
 
 	// Faield Status
-	Failed = "Failed"
+	FAILED = "Failed"
 )
 
 // A SecretReference is a reference to a secret in an arbitrary namespace.

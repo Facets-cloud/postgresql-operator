@@ -15,7 +15,14 @@ spec:
     singular: role
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.status
+      name: Status
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Role is the Schema for the roles API
@@ -131,6 +138,8 @@ spec:
           status:
             description: RoleStatus defines the observed state of Role
             properties:
+              message:
+                type: string
               status:
                 description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
                   of cluster Important: Run "make" to regenerate code after modifying

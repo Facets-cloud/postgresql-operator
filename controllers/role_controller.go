@@ -75,18 +75,16 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	// Connect to Postgres DB
 	db, err = Connect(ctx, r, role, log)
 	if err != nil {
-		log.Error(err, "Failed connecting to database... Please check the connection details")
+		msg := "Failed connecting to database."
+		log.Error(err, msg)
+		role.Status.Status = common.FAILED
+		role.Status.Message = msg
+		r.Status().Update(ctx, role)
+
 	}
 	defer db.Close()
 
-	// Ping database and check if connectivity is available
-	err = db.Ping()
-	if err != nil {
-		log.Error(err, "Pinging to database failed... Please check the connection details")
-	} else {
-		log.Info("Pinging database successful!!!")
-	}
-
+	// Get role password from secret
 	passwordSecret := &corev1.Secret{}
 	err = r.Get(
 		ctx, types.NamespacedName{
@@ -96,13 +94,15 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		passwordSecret,
 	)
 	if err != nil {
-		log.Error(err,
-			fmt.Sprintf(
-				"Failed to get password secret %s in namespace %s",
-				role.Spec.PasswordSecretRef.Name,
-				role.Spec.PasswordSecretRef.Namespace,
-			),
+		msg := fmt.Sprintf(
+			"Failed to get password secret %s in namespace %s",
+			role.Spec.PasswordSecretRef.Name,
+			role.Spec.PasswordSecretRef.Namespace,
 		)
+		log.Error(err, msg)
+		role.Status.Status = common.FAILED
+		role.Status.Message = msg
+		r.Status().Update(ctx, role)
 	}
 
 	rolePassword := string(passwordSecret.Data[role.Spec.PasswordSecretRef.Key])
@@ -112,10 +112,19 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if !isRoleExists {
 		log.Info(fmt.Sprintf("Creating Role: %s\n", role.Name))
 		// Create Role
-		CreateRole(ctx, r, db, role, log, rolePassword)
+		isRoleCreated := CreateRole(ctx, r, db, role, log, rolePassword)
+		if isRoleCreated {
+			role.Status.Status = common.CREATED
+			r.Status().Update(ctx, role)
+		}
 	} else if !isObservedStateSame {
-		log.Info(fmt.Sprintf("Observed that the state of role `%s` is different. Started role sync!!!", role.Name))
-		SyncRole(ctx, r, db, role, log, rolePassword)
+		log.Info(fmt.Sprintf("The role `%s` is not in sync with database. Started role sync!!!", role.Name))
+		isRoleSynced := SyncRole(ctx, r, db, role, log, rolePassword)
+		if isRoleSynced {
+			role.Status.Status = common.SYNCED
+			role.Status.Message = "Synced role with database"
+			r.Status().Update(ctx, role)
+		}
 	} else {
 		log.Info(fmt.Sprintf("Role `%s` already exists so skipping\n", role.Name))
 	}
@@ -137,13 +146,15 @@ func Connect(ctx context.Context, r *RoleReconciler, role *postgresv1alpha1.Role
 		Name:      role.Spec.ConnectSecretRef.Name,
 	}, connectionSecret)
 	if err != nil {
-		log.Error(err,
-			fmt.Sprintf(
-				"Failed to get connection secret %s in namespace %s",
-				role.Spec.ConnectSecretRef.Name,
-				role.Spec.ConnectSecretRef.Namespace,
-			),
+		msg := fmt.Sprintf(
+			"Failed to get connection secret %s in namespace %s",
+			role.Spec.ConnectSecretRef.Name,
+			role.Spec.ConnectSecretRef.Namespace,
 		)
+		log.Error(err, msg)
+		role.Status.Status = common.FAILED
+		role.Status.Message = msg
+		r.Status().Update(ctx, role)
 	}
 
 	// endpoint := string(connectionSecret.Data[common.ResourceCredentialsSecretEndpointKey])
@@ -187,6 +198,9 @@ func IsRoleExists(ctx context.Context, r *RoleReconciler, db *sql.DB, role *post
 	).Scan(&isRoleExists)
 	if err != nil {
 		log.Error(err, fmt.Sprintf("Failed to get role `%s`", role.Name))
+		role.Status.Status = common.FAILED
+		role.Status.Message = "Failed to get role"
+		r.Status().Update(ctx, role)
 	}
 
 	// Check if the state of Role changed
@@ -216,6 +230,9 @@ func IsRoleExists(ctx context.Context, r *RoleReconciler, db *sql.DB, role *post
 		).Scan(&isObservedStateSame)
 		if err != nil {
 			log.Error(err, fmt.Sprintf("Failed to get role `%s`", role.Name))
+			role.Status.Status = common.FAILED
+			role.Status.Message = "Failed to get role"
+			r.Status().Update(ctx, role)
 		}
 	}
 
@@ -229,6 +246,9 @@ func CreateRole(ctx context.Context, r *RoleReconciler, db *sql.DB, role *postgr
 	_, execErr := db.Exec(createRoleQuery)
 	if execErr != nil {
 		log.Error(execErr, fmt.Sprintf("Failed to create role `%s`", role.Name))
+		role.Status.Status = common.FAILED
+		role.Status.Message = "Failed to create role"
+		r.Status().Update(ctx, role)
 		return false
 	}
 
@@ -243,6 +263,9 @@ func SyncRole(ctx context.Context, r *RoleReconciler, db *sql.DB, role *postgres
 	_, execErr := db.Exec(createRoleQuery)
 	if execErr != nil {
 		log.Error(execErr, fmt.Sprintf("Failed to sync role `%s`", role.Name))
+		role.Status.Status = common.FAILED
+		role.Status.Message = "Failed to sync role"
+		r.Status().Update(ctx, role)
 		return false
 	}
 
