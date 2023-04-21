@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"database/sql"
@@ -37,6 +38,9 @@ import (
 	postgresv1alpha1 "github.com/pramodh-ayyappan/database-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 )
+
+const finalizer = "role.postgres.facets.cloud/finalizer"
+const reconcileTime = time.Duration(30 * time.Second)
 
 var (
 	logger = log.Log.WithName("role_controller")
@@ -107,19 +111,43 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	rolePassword := string(passwordSecret.Data[role.Spec.PasswordSecretRef.Key])
 
+	if !controllerutil.ContainsFinalizer(role, finalizer) {
+		controllerutil.AddFinalizer(role, finalizer)
+		err = r.Update(ctx, role)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	isRoleMarkedToBeDeleted := role.GetDeletionTimestamp() != nil
+	if isRoleMarkedToBeDeleted {
+		if controllerutil.ContainsFinalizer(role, finalizer) {
+			if err := r.DeletRole(ctx, role, log); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			controllerutil.RemoveFinalizer(role, finalizer)
+			err := r.Update(ctx, role)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
 	// Check if Role exists and create/alter role
-	isRoleExists, isObservedStateSame := IsRoleExists(ctx, r, db, role, log)
+	isRoleExists, isObservedStateSame := IsRoleExists(ctx, r, role, log)
 	if !isRoleExists {
 		log.Info(fmt.Sprintf("Creating Role: %s\n", role.Name))
 		// Create Role
-		isRoleCreated := CreateRole(ctx, r, db, role, log, rolePassword)
+		isRoleCreated := CreateRole(ctx, r, role, log, rolePassword)
 		if isRoleCreated {
 			role.Status.Status = common.CREATED
 			r.Status().Update(ctx, role)
 		}
 	} else if !isObservedStateSame {
 		log.Info(fmt.Sprintf("The role `%s` is not in sync with database. Started role sync!!!", role.Name))
-		isRoleSynced := SyncRole(ctx, r, db, role, log, rolePassword)
+		isRoleSynced := SyncRole(ctx, r, role, log, rolePassword)
 		if isRoleSynced {
 			role.Status.Status = common.SYNCED
 			role.Status.Message = "Synced role with database"
@@ -129,7 +157,7 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		log.Info(fmt.Sprintf("Role `%s` already exists so skipping\n", role.Name))
 	}
 
-	return ctrl.Result{RequeueAfter: time.Duration(30 * time.Second)}, nil
+	return ctrl.Result{RequeueAfter: reconcileTime}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -185,7 +213,7 @@ func Connect(ctx context.Context, r *RoleReconciler, role *postgresv1alpha1.Role
 	return db, err
 }
 
-func IsRoleExists(ctx context.Context, r *RoleReconciler, db *sql.DB, role *postgresv1alpha1.Role, log logr.Logger) (bool, bool) {
+func IsRoleExists(ctx context.Context, r *RoleReconciler, role *postgresv1alpha1.Role, log logr.Logger) (bool, bool) {
 	var isRoleExists bool
 	var isObservedStateSame bool
 	selectRoleQuery := "SELECT EXISTS (SELECT 1 " +
@@ -239,7 +267,7 @@ func IsRoleExists(ctx context.Context, r *RoleReconciler, db *sql.DB, role *post
 	return isRoleExists, isObservedStateSame
 }
 
-func CreateRole(ctx context.Context, r *RoleReconciler, db *sql.DB, role *postgresv1alpha1.Role, log logr.Logger, rolePassword string) bool {
+func CreateRole(ctx context.Context, r *RoleReconciler, role *postgresv1alpha1.Role, log logr.Logger, rolePassword string) bool {
 	privileges := strings.Join(PrivilegesToClauses(role.Spec.Privileges), " ")
 
 	createRoleQuery := fmt.Sprintf("CREATE ROLE %s WITH %s PASSWORD '%s'", role.Name, privileges, rolePassword)
@@ -256,7 +284,7 @@ func CreateRole(ctx context.Context, r *RoleReconciler, db *sql.DB, role *postgr
 	return true
 }
 
-func SyncRole(ctx context.Context, r *RoleReconciler, db *sql.DB, role *postgresv1alpha1.Role, log logr.Logger, rolePassword string) bool {
+func SyncRole(ctx context.Context, r *RoleReconciler, role *postgresv1alpha1.Role, log logr.Logger, rolePassword string) bool {
 	privileges := strings.Join(PrivilegesToClauses(role.Spec.Privileges), " ")
 
 	createRoleQuery := fmt.Sprintf("ALTER ROLE %s WITH %s PASSWORD '%s'", role.Name, privileges, rolePassword)
@@ -271,6 +299,17 @@ func SyncRole(ctx context.Context, r *RoleReconciler, db *sql.DB, role *postgres
 
 	log.Info(fmt.Sprintf("Role `%s` got synced successfully", role.Name))
 	return true
+}
+
+func (reconciler *RoleReconciler) DeletRole(ctx context.Context, role *v1alpha1.Role, log logr.Logger) error {
+	deleteRoleQuery := fmt.Sprintf("DROP ROLE IF EXISTS %s", role.Name)
+	_, err := db.Exec(deleteRoleQuery)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("Failed to delete role `%s`", role.Name))
+	}
+
+	log.Info(fmt.Sprintf("Role `%s` got deleted successfully", role.Name))
+	return err
 }
 
 func NegateClause(clause string, negate *bool, out *[]string) {
