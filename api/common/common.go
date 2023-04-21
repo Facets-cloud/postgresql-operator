@@ -12,7 +12,7 @@ const (
 
 	// Status Type
 	CREATE = "Create"
-	SYNC   = "Synce"
+	SYNC   = "Sync"
 	FAIL   = "Fail"
 	DELETE = "Delete"
 )

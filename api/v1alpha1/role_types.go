@@ -110,7 +110,8 @@ type RoleStatus struct {
 //+kubebuilder:subresource:status
 
 // Role is the Schema for the roles API
-// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.status`
+// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.status.conditions[-1:].type`
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[-1:].status`
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type Role struct {
 	metav1.TypeMeta   `json:",inline"`
