@@ -18,7 +18,7 @@ spec:
     key: role_password
   defaultDatabase: postgres
   sslMode: disable # disable, allow, prefer, require, verify-ca, verify-full
-  connectionLimit: -1
+  connectionLimit: 100
   privileges:
     bypassRls: false
     createDb: false

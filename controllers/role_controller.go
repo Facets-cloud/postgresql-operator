@@ -22,11 +22,17 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"database/sql"
 
@@ -39,12 +45,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const finalizer = "role.postgres.facets.cloud/finalizer"
-const reconcileTime = time.Duration(30 * time.Second)
+const (
+	finalizer                    = "role.postgres.facets.cloud/finalizer"
+	reconcileTime                = time.Duration(300 * time.Second)
+	passwordSecretNameField      = ".spec.passwordSecretRef.name"
+	passwordSecretNamespaceField = ".spec.passwordSecretRef.namespace"
+	connectSecretNameField       = ".spec.connectSecretRef.name"
+	connectSecretNamespaceField  = ".spec.connectSecretRef.namespace"
+)
 
 var (
-	logger = log.Log.WithName("role_controller")
-	db     *sql.DB
+	logger                  = log.Log.WithName("role_controller")
+	db                      *sql.DB
+	passwordSecretVersion   string
+	connectionSecretVersion string
 )
 
 // RoleReconciler reconciles a Role object
@@ -56,6 +70,7 @@ type RoleReconciler struct {
 //+kubebuilder:rbac:groups=postgres.facets.cloud,resources=roles,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=postgres.facets.cloud,resources=roles/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=postgres.facets.cloud,resources=roles/finalizers,verbs=update
+//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -76,8 +91,24 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, nil
 	}
 
+	// Get Database connection secret
+	connectionSecret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{
+		Namespace: role.Spec.ConnectSecretRef.Namespace,
+		Name:      role.Spec.ConnectSecretRef.Name,
+	}, connectionSecret)
+	if err != nil {
+		reason := fmt.Sprintf(
+			"Failed to get connection secret %s in namespace %s",
+			role.Spec.ConnectSecretRef.Name,
+			role.Spec.ConnectSecretRef.Namespace,
+		)
+		logger.Error(err, reason)
+		r.appendCondition(ctx, role, common.FAIL, metav1.ConditionFalse, "ResourceNotFound", err.Error())
+	}
+
 	// Connect to Postgres DB
-	db, err = r.Connect(ctx, role)
+	db, err = r.Connect(ctx, role, connectionSecret)
 	if err != nil {
 		reason := "Failed connecting to database."
 		logger.Error(err, reason)
@@ -86,7 +117,7 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 	defer db.Close()
 
-	// Get role password from secret
+	// Get Role password secret
 	passwordSecret := &corev1.Secret{}
 	err = r.Get(
 		ctx, types.NamespacedName{
@@ -106,6 +137,26 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	rolePassword := string(passwordSecret.Data[role.Spec.PasswordSecretRef.Key])
+	// logger.Info("-------------------------")
+	// logger.Info(fmt.Sprintf("Role Password: %s", rolePassword))
+	// logger.Info(fmt.Sprintf("old passwordSecretVersion - %s, new passwordSecretVersion - %s, old connectionSecretVersion - %s, new connectionSecretVersion - %s", role.Annotations["passwordSecretVersion"], passwordSecret.ResourceVersion, role.Annotations["connectionSecretVersion"], connectionSecret.ResourceVersion))
+	// logger.Info("-------------------------")
+	roleAnnotationPwdSecretVer := role.Annotations["passwordSecretVersion"]
+	roleAnnotationConnSecretVer := role.Annotations["connectionSecretVersion"]
+	if roleAnnotationPwdSecretVer != "" && roleAnnotationConnSecretVer != "" {
+		if roleAnnotationPwdSecretVer != passwordSecret.ResourceVersion || roleAnnotationConnSecretVer != connectionSecret.ResourceVersion {
+			isRolePasswordSynced := r.SyncRole(ctx, role, rolePassword)
+			if isRolePasswordSynced {
+				r.appendCondition(ctx, role, common.SYNC, metav1.ConditionTrue, "RolePasswordSynced", "Synced role password with database")
+			}
+		}
+	}
+
+	passwordSecretVersion = passwordSecret.ResourceVersion
+	connectionSecretVersion = connectionSecret.ResourceVersion
+	role.Annotations["passwordSecretVersion"] = passwordSecretVersion
+	role.Annotations["connectionSecretVersion"] = connectionSecretVersion
+	r.Update(ctx, role)
 
 	if !controllerutil.ContainsFinalizer(role, finalizer) {
 		controllerutil.AddFinalizer(role, finalizer)
@@ -156,28 +207,78 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&postgresv1alpha1.Role{}).
-		Complete(r)
-}
-
-func (r *RoleReconciler) Connect(ctx context.Context, role *postgresv1alpha1.Role) (*sql.DB, error) {
-	connectionSecret := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{
-		Namespace: role.Spec.ConnectSecretRef.Namespace,
-		Name:      role.Spec.ConnectSecretRef.Name,
-	}, connectionSecret)
-	if err != nil {
-		reason := fmt.Sprintf(
-			"Failed to get connection secret %s in namespace %s",
-			role.Spec.ConnectSecretRef.Name,
-			role.Spec.ConnectSecretRef.Namespace,
-		)
-		logger.Error(err, reason)
-		r.appendCondition(ctx, role, common.FAIL, metav1.ConditionFalse, "ResourceNotFound", err.Error())
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &postgresv1alpha1.Role{}, passwordSecretNameField, func(rawObj client.Object) []string {
+		// Extract the ConfigMap name from the ConfigDeployment Spec, if one is provided
+		roleData := rawObj.(*postgresv1alpha1.Role)
+		if roleData.Spec.PasswordSecretRef.Name == "" {
+			return nil
+		}
+		return []string{roleData.Spec.PasswordSecretRef.Name}
+	}); err != nil {
+		return err
 	}
 
-	// endpoint := string(connectionSecret.Data[common.ResourceCredentialsSecretEndpointKey])
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &postgresv1alpha1.Role{}, connectSecretNameField, func(rawObj client.Object) []string {
+		// Extract the ConfigMap name from the ConfigDeployment Spec, if one is provided
+		roleData := rawObj.(*postgresv1alpha1.Role)
+		if roleData.Spec.ConnectSecretRef.Name == "" {
+			return nil
+		}
+		return []string{roleData.Spec.ConnectSecretRef.Name}
+	}); err != nil {
+		return err
+	}
+
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&postgresv1alpha1.Role{}).
+		Watches(
+			&source.Kind{Type: &corev1.Secret{}},
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSecret),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
+		Complete(r)
+
+	// return ctrl.NewControllerManagedBy(mgr).
+	// 	For(&postgresv1alpha1.Role{}).
+	// 	Complete(r)
+}
+
+func (r *RoleReconciler) findObjectsForSecret(secret client.Object) []reconcile.Request {
+	roles := &postgresv1alpha1.RoleList{}
+	passwordSecretlistOps := &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(passwordSecretNameField, secret.GetName()),
+		Namespace:     secret.GetNamespace(),
+	}
+	connectionSecretlistOps := &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(connectSecretNameField, secret.GetName()),
+		Namespace:     secret.GetNamespace(),
+	}
+
+	err := r.List(context.TODO(), roles, passwordSecretlistOps)
+	if err != nil {
+		return []reconcile.Request{}
+	}
+
+	err = r.List(context.TODO(), roles, connectionSecretlistOps)
+	if err != nil {
+		return []reconcile.Request{}
+	}
+
+	requests := make([]reconcile.Request, len(roles.Items))
+	for i, item := range roles.Items {
+		requests[i] = reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      item.GetName(),
+				Namespace: item.GetNamespace(),
+			},
+		}
+	}
+
+	return requests
+}
+
+func (r *RoleReconciler) Connect(ctx context.Context, role *postgresv1alpha1.Role, connectionSecret *corev1.Secret) (*sql.DB, error) {
+	endpoint := string(connectionSecret.Data[common.ResourceCredentialsSecretEndpointKey])
 	port := string(connectionSecret.Data[common.ResourceCredentialsSecretPortKey])
 	username := string(connectionSecret.Data[common.ResourceCredentialsSecretUserKey])
 	password := string(connectionSecret.Data[common.ResourceCredentialsSecretPasswordKey])
@@ -185,7 +286,7 @@ func (r *RoleReconciler) Connect(ctx context.Context, role *postgresv1alpha1.Rol
 
 	psqlInfo := fmt.Sprintf("host=%s port=%s user=%s "+
 		"password=%s dbname=%s sslmode=%s",
-		"127.0.0.1", // endpoint,
+		endpoint,
 		port,
 		username,
 		password,
