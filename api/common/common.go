@@ -11,11 +11,10 @@ const (
 	ResourceCredentialsSecretPasswordKey = "password"
 
 	// Status Type
-	CREATE  = "Create"
-	SYNC    = "Sync"
-	FAIL    = "Fail"
-	DELETE  = "Delete"
-	OBSERVE = "Observe"
+	CREATE = "Create"
+	SYNC   = "Sync"
+	FAIL   = "Fail"
+	DELETE = "Delete"
 )
 
 // A SecretReference is a reference to a secret in an arbitrary namespace.
