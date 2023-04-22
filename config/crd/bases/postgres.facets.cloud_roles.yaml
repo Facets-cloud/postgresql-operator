@@ -16,11 +16,19 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.conditions[-1:].type
-      name: Type
-      type: string
     - jsonPath: .status.conditions[-1:].status
       name: Status
+      type: string
+    - jsonPath: .status.conditions[-1:].reason
+      name: Reason
+      type: string
+    - jsonPath: .status.conditions[-1:].message
+      name: Message
+      priority: 1
+      type: string
+    - jsonPath: .status.conditions[-1:].lastTransitionTime
+      name: Last Transition Time
+      priority: 1
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age

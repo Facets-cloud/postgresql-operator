@@ -46,12 +46,26 @@ import (
 )
 
 const (
-	finalizer                    = "role.postgres.facets.cloud/finalizer"
-	reconcileTime                = time.Duration(300 * time.Second)
-	passwordSecretNameField      = ".spec.passwordSecretRef.name"
-	passwordSecretNamespaceField = ".spec.passwordSecretRef.namespace"
-	connectSecretNameField       = ".spec.connectSecretRef.name"
-	connectSecretNamespaceField  = ".spec.connectSecretRef.namespace"
+	finalizer               = "role.postgres.facets.cloud/finalizer"
+	reconcileTime           = time.Duration(10 * time.Second)
+	passwordSecretNameField = ".spec.passwordSecretRef.name"
+	connectSecretNameField  = ".spec.connectSecretRef.name"
+	errRoleAlreadyExists    = "Role already exists"
+	errRoleCreatedOutside   = "Role created outside of database operator"
+	errRoleDeletedOutside   = "Role deleted outside of database operator"
+	ROLECREATED             = "RoleCreated"
+	ROLEEXISTS              = "RoleExists"
+	ROLESYNCED              = "RoleSynced"
+	ROLEPASSWORDSYNCED      = "RolePasswordSynced"
+	ROLECREATEFAILED        = "RoleCreateFailed"
+	ROLESYNCFAILED          = "RoleSyncFailed"
+	ROLEPASSWORDSYNCFAILED  = "RolePasswordSyncFailed"
+	ROLEDELETED             = "RoleDeleted"
+	ROLEDELETEFAILED        = "RoleDeleteFailed"
+	RESOURCENOTFOUND        = "ResourceNotFound"
+	CONNECTIONFAILED        = "ConnectionFailed"
+	OBSERVEROLESTATE        = "ObserveRoleState"
+	ROLEGETFAILED           = "RoleGetFailed"
 )
 
 var (
@@ -104,15 +118,15 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			role.Spec.ConnectSecretRef.Namespace,
 		)
 		logger.Error(err, reason)
-		r.appendCondition(ctx, role, common.FAIL, metav1.ConditionFalse, "ResourceNotFound", err.Error())
+		r.appendCondition(ctx, role, common.FAIL, metav1.ConditionFalse, RESOURCENOTFOUND, err.Error())
 	}
 
 	// Connect to Postgres DB
 	db, err = r.Connect(ctx, role, connectionSecret)
 	if err != nil {
-		reason := "Failed connecting to database."
+		reason := "Failed connecting to database"
 		logger.Error(err, reason)
-		r.appendCondition(ctx, role, common.FAIL, metav1.ConditionFalse, "ConnectionFailed", err.Error())
+		r.appendCondition(ctx, role, common.FAIL, metav1.ConditionFalse, CONNECTIONFAILED, err.Error())
 
 	}
 	defer db.Close()
@@ -133,7 +147,7 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			role.Spec.PasswordSecretRef.Namespace,
 		)
 		logger.Error(err, reason)
-		r.appendCondition(ctx, role, common.FAIL, metav1.ConditionFalse, "ResourceNotFound", err.Error())
+		r.appendCondition(ctx, role, common.FAIL, metav1.ConditionFalse, RESOURCENOTFOUND, err.Error())
 	}
 
 	rolePassword := string(passwordSecret.Data[role.Spec.PasswordSecretRef.Key])
@@ -141,35 +155,35 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	// logger.Info(fmt.Sprintf("Role Password: %s", rolePassword))
 	// logger.Info(fmt.Sprintf("old passwordSecretVersion - %s, new passwordSecretVersion - %s, old connectionSecretVersion - %s, new connectionSecretVersion - %s", role.Annotations["passwordSecretVersion"], passwordSecret.ResourceVersion, role.Annotations["connectionSecretVersion"], connectionSecret.ResourceVersion))
 	// logger.Info("-------------------------")
-	roleAnnotationPwdSecretVer := role.Annotations["passwordSecretVersion"]
-	roleAnnotationConnSecretVer := role.Annotations["connectionSecretVersion"]
-	if roleAnnotationPwdSecretVer != "" && roleAnnotationConnSecretVer != "" {
-		if roleAnnotationPwdSecretVer != passwordSecret.ResourceVersion || roleAnnotationConnSecretVer != connectionSecret.ResourceVersion {
-			isRolePasswordSynced := r.SyncRole(ctx, role, rolePassword)
-			if isRolePasswordSynced {
-				r.appendCondition(ctx, role, common.SYNC, metav1.ConditionTrue, "RolePasswordSynced", "Synced role password with database")
+	// roleAnnotationPwdSecretVer := role.Annotations["passwordSecretVersion"]
+	// roleAnnotationConnSecretVer := role.Annotations["connectionSecretVersion"]
+	// if roleAnnotationPwdSecretVer != "" && roleAnnotationConnSecretVer != "" {
+	// 	if roleAnnotationPwdSecretVer != passwordSecret.ResourceVersion || roleAnnotationConnSecretVer != connectionSecret.ResourceVersion {
+	// 		isRolePasswordSynced := r.SyncRole(ctx, role, rolePassword)
+	// 		if isRolePasswordSynced {
+	// 			r.appendCondition(ctx, role, common.SYNC, metav1.ConditionTrue, "RolePasswordSynced", "Synced role password with database")
+	// 		}
+	// 	}
+	// }
+
+	// Add annotation for external secret update to detected
+	// passwordSecretVersion = passwordSecret.ResourceVersion
+	// connectionSecretVersion = connectionSecret.ResourceVersion
+	// role.Annotations["passwordSecretVersion"] = passwordSecretVersion
+	// role.Annotations["connectionSecretVersion"] = connectionSecretVersion
+	// r.Update(ctx, role)
+
+	if role.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !controllerutil.ContainsFinalizer(role, finalizer) {
+			controllerutil.AddFinalizer(role, finalizer)
+			err = r.Update(ctx, role)
+			if err != nil {
+				return ctrl.Result{}, err
 			}
 		}
-	}
-
-	passwordSecretVersion = passwordSecret.ResourceVersion
-	connectionSecretVersion = connectionSecret.ResourceVersion
-	role.Annotations["passwordSecretVersion"] = passwordSecretVersion
-	role.Annotations["connectionSecretVersion"] = connectionSecretVersion
-	r.Update(ctx, role)
-
-	if !controllerutil.ContainsFinalizer(role, finalizer) {
-		controllerutil.AddFinalizer(role, finalizer)
-		err = r.Update(ctx, role)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-
-	isRoleMarkedToBeDeleted := role.GetDeletionTimestamp() != nil
-	if isRoleMarkedToBeDeleted {
+	} else {
 		if controllerutil.ContainsFinalizer(role, finalizer) {
-			if err := r.DeletRole(ctx, role); err != nil {
+			if _, _, _, _, err := r.DeletRole(ctx, role); err != nil {
 				return ctrl.Result{}, err
 			}
 
@@ -182,25 +196,59 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, nil
 	}
 
-	// Check if Role exists and create/alter role
-	isRoleExists, isObservedStateSame := r.IsRoleExists(ctx, role)
-	if !isRoleExists {
-		logger.Info(fmt.Sprintf("Creating Role: %s\n", role.Name))
-		// Create Role
-		isRoleCreated := r.CreateRole(ctx, role, rolePassword)
-		if isRoleCreated {
-			r.appendCondition(ctx, role, common.CREATE, metav1.ConditionTrue, "RoleCreated", "Role got created")
-		}
-	} else if !isObservedStateSame {
-		logger.Info(fmt.Sprintf("The role `%s` is not in sync with database. Started role sync!!!", role.Name))
-		isRoleSynced := r.SyncRole(ctx, role, rolePassword)
-		if isRoleSynced {
-			r.appendCondition(ctx, role, common.SYNC, metav1.ConditionTrue, "RoleSynced", "Synced role with database")
+	// Manage Role based on conditions
+	if !(len(role.Status.Conditions) > 0) {
+		typeName, status, reason, message := r.CreateRole(ctx, role, rolePassword)
+		if status == metav1.ConditionTrue {
+			r.appendCondition(ctx, role, typeName, status, reason, message)
+		} else {
+			if reason == ROLECREATEFAILED && message == errRoleCreatedOutside {
+				r.appendCondition(ctx, role, typeName, status, reason, message)
+				typeName, status, reason, message, _ := r.DeletRole(ctx, role)
+				r.appendCondition(ctx, role, typeName, status, reason, message)
+				typeName, status, reason, message = r.CreateRole(ctx, role, rolePassword)
+				r.appendCondition(ctx, role, typeName, status, reason, message)
+			} else {
+				r.appendCondition(ctx, role, typeName, status, reason, message)
+			}
 		}
 	} else {
-		logger.Info(fmt.Sprintf("Role `%s` already exists so skipping\n", role.Name))
-		r.appendCondition(ctx, role, common.CREATE, metav1.ConditionTrue, "RoleCreated", "Role got created")
+		isRoleStateInSync := r.ObserveRoleState(ctx, role)
+		if !isRoleStateInSync {
+			typeName, status, reason, message := r.SyncRole(ctx, role, rolePassword)
+			if status == metav1.ConditionTrue {
+				r.appendCondition(ctx, role, typeName, status, reason, message)
+			} else {
+				if reason == ROLESYNCFAILED && message == errRoleDeletedOutside {
+					r.appendCondition(ctx, role, typeName, status, reason, message)
+					typeName, status, reason, message = r.CreateRole(ctx, role, rolePassword)
+					r.appendCondition(ctx, role, typeName, status, reason, message)
+				} else {
+					r.appendCondition(ctx, role, typeName, status, reason, message)
+				}
+			}
+		}
 	}
+
+	// // Check if Role exists and create/alter role
+	// isRoleExists, isObservedStateSame := r.IsRoleExists(ctx, role)
+	// if !isRoleExists {
+	// 	logger.Info(fmt.Sprintf("Creating Role: %s\n", role.Name))
+	// 	// Create Role
+	// 	isRoleCreated := r.CreateRole(ctx, role, rolePassword)
+	// 	if isRoleCreated {
+	// 		r.appendCondition(ctx, role, common.CREATE, metav1.ConditionTrue, "RoleCreated", "Role got created")
+	// 	}
+	// } else if !isObservedStateSame {
+	// 	logger.Info(fmt.Sprintf("The role `%s` is not in sync with database. Started role sync!!!", role.Name))
+	// 	isRoleSynced := r.SyncRole(ctx, role, rolePassword)
+	// 	if isRoleSynced {
+	// 		r.appendCondition(ctx, role, common.SYNC, metav1.ConditionTrue, "RoleSynced", "Synced role with database")
+	// 	}
+	// } else {
+	// 	logger.Info(fmt.Sprintf("Role `%s` already exists so skipping\n", role.Name))
+	// 	r.appendCondition(ctx, role, common.CREATE, metav1.ConditionTrue, "RoleCreated", "Role got created")
+	// }
 
 	return ctrl.Result{RequeueAfter: reconcileTime}, nil
 }
@@ -349,47 +397,86 @@ func (r *RoleReconciler) IsRoleExists(ctx context.Context, role *postgresv1alpha
 	return isRoleExists, isObservedStateSame
 }
 
-func (r *RoleReconciler) CreateRole(ctx context.Context, role *postgresv1alpha1.Role, rolePassword string) bool {
+func (r *RoleReconciler) CreateRole(ctx context.Context, role *postgresv1alpha1.Role, rolePassword string) (string, metav1.ConditionStatus, string, string) {
 	privileges := strings.Join(PrivilegesToClauses(role.Spec.Privileges), " ")
-
-	createRoleQuery := fmt.Sprintf("CREATE ROLE %s WITH %s PASSWORD '%s'", role.Name, privileges, rolePassword)
+	createRoleQuery := fmt.Sprintf("CREATE ROLE %s WITH %s PASSWORD '%s' CONNECTION LIMIT %d", role.Name, privileges, rolePassword, *role.Spec.ConnectionLimit)
 	_, err := db.Exec(createRoleQuery)
 	if err != nil {
-		logger.Error(err, fmt.Sprintf("Failed to create role `%s`", role.Name))
-		r.appendCondition(ctx, role, "FailedToCreateRole", metav1.ConditionFalse, "FailedToCreateRole", err.Error())
-		return false
+		if strings.Contains(err.Error(), fmt.Sprintf("pq: role \"%s\" already exists", role.Name)) {
+			logger.Error(err, fmt.Sprintf("Role `%s` created outside of database operator.", role.Name))
+			return common.FAIL, metav1.ConditionFalse, ROLECREATEFAILED, errRoleCreatedOutside
+		} else {
+			logger.Error(err, fmt.Sprintf("Failed to create role `%s`, Check if the secret `%s/%s` has valid database connection details", role.Name, role.Spec.ConnectSecretRef.Namespace, role.Spec.ConnectSecretRef.Name))
+			return common.FAIL, metav1.ConditionFalse, ROLECREATEFAILED, fmt.Sprintf("%s, Check if the secret `%s/%s` has valid database connection details", err.Error(), role.Spec.ConnectSecretRef.Namespace, role.Spec.ConnectSecretRef.Name)
+		}
 	}
 
 	logger.Info(fmt.Sprintf("Role `%s` got created successfully", role.Name))
-	return true
+	return common.CREATE, metav1.ConditionTrue, ROLECREATED, "Role created successfully"
 }
 
-func (r *RoleReconciler) SyncRole(ctx context.Context, role *postgresv1alpha1.Role, rolePassword string) bool {
-	privileges := strings.Join(PrivilegesToClauses(role.Spec.Privileges), " ")
-
-	createRoleQuery := fmt.Sprintf("ALTER ROLE %s WITH %s PASSWORD '%s'", role.Name, privileges, rolePassword)
-	_, err := db.Exec(createRoleQuery)
-	if err != nil {
-		logger.Error(err, fmt.Sprintf("Failed to sync role `%s`", role.Name))
-		r.appendCondition(ctx, role, common.FAIL, metav1.ConditionFalse, "FailedToSyncRole", err.Error())
-		return false
-	}
-
-	logger.Info(fmt.Sprintf("Role `%s` got synced successfully", role.Name))
-	return true
-}
-
-func (r *RoleReconciler) DeletRole(ctx context.Context, role *v1alpha1.Role) error {
+func (r *RoleReconciler) DeletRole(ctx context.Context, role *v1alpha1.Role) (string, metav1.ConditionStatus, string, string, error) {
 	deleteRoleQuery := fmt.Sprintf("DROP ROLE IF EXISTS %s", role.Name)
 	_, err := db.Exec(deleteRoleQuery)
 	if err != nil {
 		logger.Error(err, fmt.Sprintf("Failed to delete role `%s`", role.Name))
-		r.appendCondition(ctx, role, common.FAIL, metav1.ConditionFalse, "FailedToDeleteRole", err.Error())
+		return common.FAIL, metav1.ConditionFalse, ROLEDELETEFAILED, err.Error(), err
 	}
 
 	logger.Info(fmt.Sprintf("Role `%s` got deleted successfully", role.Name))
-	r.appendCondition(ctx, role, common.DELETE, metav1.ConditionTrue, "RoleDeleted", "Role got successfully deleted")
-	return err
+	return common.DELETE, metav1.ConditionTrue, ROLEDELETED, "Role deleted successfully", err
+}
+
+func (r *RoleReconciler) SyncRole(ctx context.Context, role *postgresv1alpha1.Role, rolePassword string) (string, metav1.ConditionStatus, string, string) {
+	privileges := strings.Join(PrivilegesToClauses(role.Spec.Privileges), " ")
+
+	createRoleQuery := fmt.Sprintf("ALTER ROLE %s WITH %s PASSWORD '%s' CONNECTION LIMIT %d", role.Name, privileges, rolePassword, *role.Spec.ConnectionLimit)
+	_, err := db.Exec(createRoleQuery)
+	if err != nil {
+		if strings.Contains(err.Error(), fmt.Sprintf("pq: role \"%s\" does not exist", role.Name)) {
+			logger.Error(err, fmt.Sprintf("Failed to sync role `%s`. Role deleted outside of database operator", role.Name))
+			return common.SYNC, metav1.ConditionFalse, ROLESYNCFAILED, errRoleDeletedOutside
+		} else {
+			logger.Error(err, fmt.Sprintf("Failed to sync role `%s`", role.Name))
+			return common.SYNC, metav1.ConditionFalse, ROLESYNCFAILED, err.Error()
+		}
+	}
+
+	logger.Info(fmt.Sprintf("Role `%s` got synced successfully", role.Name))
+	return common.SYNC, metav1.ConditionTrue, ROLESYNCED, "Role synced successfully"
+}
+
+func (r *RoleReconciler) ObserveRoleState(ctx context.Context, role *postgresv1alpha1.Role) bool {
+	var isRoleStateChanged bool
+	observeRoleStateQuery := "SELECT EXISTS (SELECT 1 " +
+		"FROM pg_roles WHERE rolname = $1 " +
+		"AND rolsuper = $2 " +
+		"AND rolinherit = $3 " +
+		"AND rolcreaterole = $4 " +
+		"AND rolcreatedb = $5 " +
+		"AND rolcanlogin = $6 " +
+		"AND rolreplication = $7 " +
+		"AND rolconnlimit = $8 " +
+		"AND rolbypassrls = $9)"
+
+	err := db.QueryRow(
+		observeRoleStateQuery,
+		role.Name,
+		&role.Spec.Privileges.SuperUser,
+		&role.Spec.Privileges.Inherit,
+		&role.Spec.Privileges.CreateRole,
+		&role.Spec.Privileges.CreateDb,
+		&role.Spec.Privileges.Login,
+		&role.Spec.Privileges.Replication,
+		&role.Spec.ConnectionLimit,
+		&role.Spec.Privileges.BypassRls,
+	).Scan(&isRoleStateChanged)
+	if err != nil {
+		logger.Error(err, fmt.Sprintf("Failed to get role `%s` when observing", role.Name))
+		r.appendCondition(ctx, role, common.FAIL, metav1.ConditionFalse, ROLEGETFAILED, err.Error())
+	}
+	return isRoleStateChanged
+
 }
 
 func NegateClause(clause string, negate *bool, out *[]string) {
@@ -421,25 +508,20 @@ func PrivilegesToClauses(p postgresv1alpha1.RolePrivilege) []string {
 	return pc
 }
 
-func (r *RoleReconciler) appendCondition(ctx context.Context, role *postgresv1alpha1.Role, typeName string, status metav1.ConditionStatus, reason string, message string) error {
-	if !r.containsCondition(ctx, role, reason) {
-		time := metav1.Time{Time: time.Now()}
-		condition := metav1.Condition{Type: typeName, Status: status, Reason: reason, Message: message, LastTransitionTime: time}
-		role.Status.Conditions = append(role.Status.Conditions, condition)
-		err := r.Status().Update(ctx, role)
-		if err != nil {
-			logger.Error(err, "Role resource status update failed")
-		}
-	}
-	return nil
-}
+func (r *RoleReconciler) appendCondition(ctx context.Context, role *postgresv1alpha1.Role, typeName string, status metav1.ConditionStatus, reason string, message string) {
+	time := metav1.Time{Time: time.Now()}
+	condition := metav1.Condition{Type: typeName, Status: status, Reason: reason, Message: message, LastTransitionTime: time}
 
-func (r *RoleReconciler) containsCondition(ctx context.Context, role *postgresv1alpha1.Role, reason string) bool {
-	output := false
-	for _, condition := range role.Status.Conditions {
-		if condition.Reason == reason {
-			output = true
+	// Remove old status
+	for idx, roleCondition := range role.Status.Conditions {
+		if roleCondition.Reason == condition.Reason {
+			role.Status.Conditions = append(role.Status.Conditions[:idx], role.Status.Conditions[idx+1:]...)
 		}
 	}
-	return output
+
+	role.Status.Conditions = append(role.Status.Conditions, condition)
+	err := r.Status().Update(ctx, role)
+	if err != nil {
+		logger.Error(err, "Role resource status update failed")
+	}
 }
