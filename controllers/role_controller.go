@@ -47,7 +47,7 @@ import (
 
 const (
 	finalizer               = "role.postgres.facets.cloud/finalizer"
-	reconcileTime           = time.Duration(60 * time.Second)
+	reconcileTime           = time.Duration(300 * time.Second)
 	passwordSecretNameField = ".spec.passwordSecretRef.name"
 	connectSecretNameField  = ".spec.connectSecretRef.name"
 	errRoleAlreadyExists    = "Role already exists"
