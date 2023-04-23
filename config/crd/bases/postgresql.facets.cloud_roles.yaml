@@ -5,9 +5,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.11.1
   creationTimestamp: null
-  name: roles.postgres.facets.cloud
+  name: roles.postgresql.facets.cloud
 spec:
-  group: postgres.facets.cloud
+  group: postgresql.facets.cloud
   names:
     kind: Role
     listKind: RoleList

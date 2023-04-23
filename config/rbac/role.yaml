@@ -14,7 +14,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - postgres.facets.cloud
+  - postgresql.facets.cloud
   resources:
   - roles
   verbs:
@@ -26,13 +26,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - postgres.facets.cloud
+  - postgresql.facets.cloud
   resources:
   - roles/finalizers
   verbs:
   - update
 - apiGroups:
-  - postgres.facets.cloud
+  - postgresql.facets.cloud
   resources:
   - roles/status
   verbs:

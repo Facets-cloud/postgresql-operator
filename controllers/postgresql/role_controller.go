@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package postgresql
 
 import (
 	"context"
@@ -37,16 +37,16 @@ import (
 	"database/sql"
 
 	_ "github.com/lib/pq"
-	"github.com/pramodh-ayyappan/database-operator/api/common"
-	"github.com/pramodh-ayyappan/database-operator/api/v1alpha1"
-	postgresv1alpha1 "github.com/pramodh-ayyappan/database-operator/api/v1alpha1"
+	"github.com/pramodh-ayyappan/database-operator/apis/common"
+	"github.com/pramodh-ayyappan/database-operator/apis/postgresql/v1alpha1"
+	postgresql "github.com/pramodh-ayyappan/database-operator/apis/postgresql/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
-	finalizer               = "role.postgres.facets.cloud/finalizer"
+	finalizer               = "role.postgresql.facets.cloud/finalizer"
 	reconcileTime           = time.Duration(300 * time.Second)
 	passwordSecretNameField = ".spec.passwordSecretRef.name"
 	connectSecretNameField  = ".spec.connectSecretRef.name"
@@ -90,9 +90,9 @@ type PasswordSecretHandle struct {
 	errorMsg         error
 }
 
-//+kubebuilder:rbac:groups=postgres.facets.cloud,resources=roles,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=postgres.facets.cloud,resources=roles/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=postgres.facets.cloud,resources=roles/finalizers,verbs=update
+//+kubebuilder:rbac:groups=postgresql.facets.cloud,resources=roles,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=postgresql.facets.cloud,resources=roles/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=postgresql.facets.cloud,resources=roles/finalizers,verbs=update
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -108,7 +108,7 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	logger.WithValues("Request.Namespace", req.Namespace, "Request.Name", req.Name)
 
-	role := &v1alpha1.Role{}
+	role := &postgresql.Role{}
 	err := r.Get(ctx, req.NamespacedName, role)
 	if err != nil {
 		return ctrl.Result{}, nil
@@ -263,8 +263,8 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &postgresv1alpha1.Role{}, passwordSecretNameField, func(rawObj client.Object) []string {
-		roleData := rawObj.(*postgresv1alpha1.Role)
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &postgresql.Role{}, passwordSecretNameField, func(rawObj client.Object) []string {
+		roleData := rawObj.(*postgresql.Role)
 		if roleData.Spec.PasswordSecretRef.Name == "" {
 			return nil
 		}
@@ -274,7 +274,7 @@ func (r *RoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&postgresv1alpha1.Role{}).
+		For(&postgresql.Role{}).
 		Watches(
 			&source.Kind{Type: &corev1.Secret{}},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSecret),
@@ -284,7 +284,7 @@ func (r *RoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *RoleReconciler) findObjectsForSecret(secret client.Object) []reconcile.Request {
-	roles := &postgresv1alpha1.RoleList{}
+	roles := &postgresql.RoleList{}
 	passwordSecretlistOps := &client.ListOptions{
 		FieldSelector: fields.OneTermEqualSelector(passwordSecretNameField, secret.GetName()),
 		Namespace:     secret.GetNamespace(),
@@ -308,7 +308,7 @@ func (r *RoleReconciler) findObjectsForSecret(secret client.Object) []reconcile.
 	return requests
 }
 
-func (r *RoleReconciler) Connect(ctx context.Context, role *postgresv1alpha1.Role, connectionSecret *corev1.Secret) (*sql.DB, error) {
+func (r *RoleReconciler) Connect(ctx context.Context, role *postgresql.Role, connectionSecret *corev1.Secret) (*sql.DB, error) {
 	endpoint := string(connectionSecret.Data[common.ResourceCredentialsSecretEndpointKey])
 	port := string(connectionSecret.Data[common.ResourceCredentialsSecretPortKey])
 	username := string(connectionSecret.Data[common.ResourceCredentialsSecretUserKey])
@@ -330,9 +330,9 @@ func (r *RoleReconciler) Connect(ctx context.Context, role *postgresv1alpha1.Rol
 	return db, err
 }
 
-func (r *RoleReconciler) CreateRole(ctx context.Context, role *postgresv1alpha1.Role, rolePassword string) (string, metav1.ConditionStatus, string, string) {
+func (r *RoleReconciler) CreateRole(ctx context.Context, role *postgresql.Role, rolePassword string) (string, metav1.ConditionStatus, string, string) {
 	privileges := strings.Join(PrivilegesToClauses(role.Spec.Privileges), " ")
-	createRoleQuery := fmt.Sprintf("CREATE ROLE %s WITH %s PASSWORD '%s' CONNECTION LIMIT %d", role.Name, privileges, rolePassword, *role.Spec.ConnectionLimit)
+	createRoleQuery := fmt.Sprintf("CREATE ROLE \"%s\" WITH %s PASSWORD '%s' CONNECTION LIMIT %d", role.Name, privileges, rolePassword, *role.Spec.ConnectionLimit)
 	_, err := db.Exec(createRoleQuery)
 	if err != nil {
 		if strings.Contains(err.Error(), fmt.Sprintf("pq: role \"%s\" already exists", role.Name)) {
@@ -349,7 +349,7 @@ func (r *RoleReconciler) CreateRole(ctx context.Context, role *postgresv1alpha1.
 }
 
 func (r *RoleReconciler) DeletRole(ctx context.Context, role *v1alpha1.Role) (string, metav1.ConditionStatus, string, string, error) {
-	deleteRoleQuery := fmt.Sprintf("DROP ROLE IF EXISTS %s", role.Name)
+	deleteRoleQuery := fmt.Sprintf("DROP ROLE IF EXISTS \"%s\"", role.Name)
 	_, err := db.Exec(deleteRoleQuery)
 	if err != nil {
 		logger.Error(err, fmt.Sprintf("Failed to delete role `%s`", role.Name))
@@ -360,11 +360,11 @@ func (r *RoleReconciler) DeletRole(ctx context.Context, role *v1alpha1.Role) (st
 	return common.DELETE, metav1.ConditionTrue, ROLEDELETED, "Role deleted successfully", err
 }
 
-func (r *RoleReconciler) SyncRole(ctx context.Context, role *postgresv1alpha1.Role, rolePassword string, isPasswordSync bool) (string, metav1.ConditionStatus, string, string) {
+func (r *RoleReconciler) SyncRole(ctx context.Context, role *postgresql.Role, rolePassword string, isPasswordSync bool) (string, metav1.ConditionStatus, string, string) {
 	privileges := strings.Join(PrivilegesToClauses(role.Spec.Privileges), " ")
 
-	createRoleQuery := fmt.Sprintf("ALTER ROLE %s WITH %s PASSWORD '%s' CONNECTION LIMIT %d", role.Name, privileges, rolePassword, *role.Spec.ConnectionLimit)
-	_, err := db.Exec(createRoleQuery)
+	alterRoleQuery := fmt.Sprintf("ALTER ROLE \"%s\" WITH %s PASSWORD '%s' CONNECTION LIMIT %d", role.Name, privileges, rolePassword, *role.Spec.ConnectionLimit)
+	_, err := db.Exec(alterRoleQuery)
 	if err != nil {
 		if strings.Contains(err.Error(), fmt.Sprintf("pq: role \"%s\" does not exist", role.Name)) {
 			logger.Error(err, fmt.Sprintf("Failed to sync role `%s`. Role deleted outside of database operator ", role.Name))
@@ -383,7 +383,7 @@ func (r *RoleReconciler) SyncRole(ctx context.Context, role *postgresv1alpha1.Ro
 	return common.SYNC, metav1.ConditionTrue, ROLESYNCED, "Role synced successfully"
 }
 
-func (r *RoleReconciler) ObserveRoleState(ctx context.Context, role *postgresv1alpha1.Role) bool {
+func (r *RoleReconciler) ObserveRoleState(ctx context.Context, role *postgresql.Role) bool {
 	var isRoleStateChanged bool
 	observeRoleStateQuery := "SELECT EXISTS (SELECT 1 " +
 		"FROM pg_roles WHERE rolname = $1 " +
@@ -429,7 +429,7 @@ func NegateClause(clause string, negate *bool, out *[]string) {
 	*out = append(*out, clause)
 }
 
-func PrivilegesToClauses(p postgresv1alpha1.RolePrivilege) []string {
+func PrivilegesToClauses(p postgresql.RolePrivilege) []string {
 	pc := []string{}
 
 	NegateClause("SUPERUSER", p.SuperUser, &pc)
@@ -443,7 +443,7 @@ func PrivilegesToClauses(p postgresv1alpha1.RolePrivilege) []string {
 	return pc
 }
 
-func (r *RoleReconciler) appendCondition(ctx context.Context, role *postgresv1alpha1.Role, typeName string, status metav1.ConditionStatus, reason string, message string) {
+func (r *RoleReconciler) appendCondition(ctx context.Context, role *postgresql.Role, typeName string, status metav1.ConditionStatus, reason string, message string) {
 	time := metav1.Time{Time: time.Now()}
 	condition := metav1.Condition{Type: typeName, Status: status, Reason: reason, Message: message, LastTransitionTime: time}
 

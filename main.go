@@ -31,8 +31,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	postgresv1alpha1 "github.com/pramodh-ayyappan/database-operator/api/v1alpha1"
-	"github.com/pramodh-ayyappan/database-operator/controllers"
+	postgresqlv1alpha1 "github.com/pramodh-ayyappan/database-operator/apis/postgresql/v1alpha1"
+	postgresqlcontrollers "github.com/pramodh-ayyappan/database-operator/controllers/postgresql"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -44,7 +44,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(postgresv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(postgresqlv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -89,7 +89,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.RoleReconciler{
+	if err = (&postgresqlcontrollers.RoleReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
