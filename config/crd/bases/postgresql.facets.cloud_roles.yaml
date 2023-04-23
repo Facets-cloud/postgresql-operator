@@ -72,11 +72,6 @@ spec:
                 description: ConnectionLimit to be applied to the role.
                 format: int32
                 type: integer
-              defaultDatabase:
-                default: postgres
-                description: Defines the Default Database used to set up a connection
-                  to the provided PostgreSQL instance
-                type: string
               passwordSecretRef:
                 description: PasswordSecretRef references the secret that contains
                   the password used for this role.
@@ -133,18 +128,6 @@ spec:
                     description: SuperUser grants SUPERUSER privilege when true.
                     type: boolean
                 type: object
-              sslMode:
-                default: disable
-                description: Defines the SSL mode used to set up a connection to the
-                  provided PostgreSQL instance
-                enum:
-                - disable
-                - allow
-                - prefer
-                - require
-                - verify-ca
-                - verify-full
-                type: string
             type: object
           status:
             description: RoleStatus defines the observed state of Role

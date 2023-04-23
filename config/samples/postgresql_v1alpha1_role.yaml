@@ -16,8 +16,6 @@ spec:
     namespace: default
     name: db-conn
     key: role_password
-  defaultDatabase: postgres
-  sslMode: disable
   connectionLimit: 100
   privileges:
     bypassRls: false

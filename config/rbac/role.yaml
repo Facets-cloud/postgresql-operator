@@ -16,6 +16,32 @@ rules:
 - apiGroups:
   - postgresql.facets.cloud
   resources:
+  - grants
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - postgresql.facets.cloud
+  resources:
+  - grants/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - postgresql.facets.cloud
+  resources:
+  - grants/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - postgresql.facets.cloud
+  resources:
   - roles
   verbs:
   - create

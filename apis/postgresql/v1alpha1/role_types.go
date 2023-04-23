@@ -74,19 +74,6 @@ type RoleSpec struct {
 	// +kubebuilder:validation:Required
 	PasswordSecretRef common.SecretKeySelector `json:"passwordSecretRef,omitempty"`
 
-	// Defines the Default Database used to set up a connection to the provided
-	// PostgreSQL instance
-	// +kubebuilder:default=postgres
-	// +kubebuilder:validation:Optional
-	DefaultDatabase *string `json:"defaultDatabase,omitempty"`
-
-	// Defines the SSL mode used to set up a connection to the provided
-	// PostgreSQL instance
-	// +kubebuilder:validation:Enum=disable;allow;prefer;require;verify-ca;verify-full
-	// +kubebuilder:default=disable
-	// +kubebuilder:validation:Optional
-	SSLMode *string `json:"sslMode,omitempty"`
-
 	// ConnectionLimit to be applied to the role.
 	// +kubebuilder:validation:Min=-1
 	// +optional
