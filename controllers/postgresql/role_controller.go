@@ -62,16 +62,13 @@ const (
 	ROLEPASSWORDSYNCFAILED  = "RolePasswordSyncFailed"
 	ROLEDELETED             = "RoleDeleted"
 	ROLEDELETEFAILED        = "RoleDeleteFailed"
-	RESOURCENOTFOUND        = "ResourceNotFound"
-	CONNECTIONFAILED        = "ConnectionFailed"
 	ROLEGETFAILED           = "RoleGetFailed"
 )
 
 var (
-	roleLogger              = log.Log.WithName("role_controller")
-	roleDB                  *sql.DB
-	passwordSecretVersion   string
-	connectionSecretVersion string
+	roleLogger            = log.Log.WithName("role_controller")
+	roleDB                *sql.DB
+	passwordSecretVersion string
 )
 
 // RoleReconciler reconciles a Role object
@@ -117,7 +114,7 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			role.Spec.ConnectSecretRef.Namespace,
 			role.Name,
 		)
-		r.appendRoleStatusCondition(ctx, role, common.FAIL, metav1.ConditionFalse, RESOURCENOTFOUND, err.Error())
+		r.appendRoleStatusCondition(ctx, role, common.FAIL, metav1.ConditionFalse, common.RESOURCENOTFOUND, err.Error())
 		roleLogger.Error(err, reason)
 	}
 
@@ -137,18 +134,19 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			role.Spec.PasswordSecretRef.Namespace,
 			role.Name,
 		)
-		r.appendRoleStatusCondition(ctx, role, common.FAIL, metav1.ConditionFalse, RESOURCENOTFOUND, err.Error())
+		r.appendRoleStatusCondition(ctx, role, common.FAIL, metav1.ConditionFalse, common.RESOURCENOTFOUND, err.Error())
 		roleLogger.Error(err, reason)
 	}
 
 	// Connect to Postgres DB
-	common.ConnectToPostgres(connectionSecret)
+	defaultDatabase := string(connectionSecret.Data[common.ResourceCredentialsSecretDatabaseKey])
+	roleDB, err = common.ConnectToPostgres(connectionSecret, defaultDatabase)
 	if err != nil {
 		reason := fmt.Sprintf("Failed connecting to database for role `%s`", role.Name)
 		roleLogger.Error(err, reason)
-		r.appendRoleStatusCondition(ctx, role, common.FAIL, metav1.ConditionFalse, CONNECTIONFAILED, err.Error())
-
+		r.appendRoleStatusCondition(ctx, role, common.FAIL, metav1.ConditionFalse, common.CONNECTIONFAILED, err.Error())
 	}
+
 	defer roleDB.Close()
 
 	rolePassword := string(passwordSecret.Data[role.Spec.PasswordSecretRef.Key])
@@ -175,6 +173,7 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	role.Annotations["passwordSecretVersion"] = passwordSecretVersion
 	r.Update(ctx, role)
 
+	// Add finalizers to handle delete scenario
 	if role.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(role, roleFinalizer) {
 			controllerutil.AddFinalizer(role, roleFinalizer)
@@ -401,15 +400,23 @@ func (r *RoleReconciler) appendRoleStatusCondition(ctx context.Context, role *po
 
 	roleStatusConditions := role.Status.Conditions
 
-	// Only keep 5 statuses
-	if len(roleStatusConditions) >= 5 {
-		if len(roleStatusConditions) > 5 {
-			roleStatusConditions = roleStatusConditions[len(roleStatusConditions)-5:]
+	if len(roleStatusConditions) > 0 {
+		// Only keep 5 statuses
+		if len(roleStatusConditions) >= 5 {
+			if len(roleStatusConditions) > 5 {
+				roleStatusConditions = roleStatusConditions[len(roleStatusConditions)-5:]
+			}
 		}
-	}
 
-	getLastItem := roleStatusConditions[len(roleStatusConditions)-1]
-	if getLastItem.Reason != condition.Reason && getLastItem.Status != metav1.ConditionFalse {
+		getLastItem := roleStatusConditions[len(roleStatusConditions)-1]
+		if getLastItem.Reason != condition.Reason && getLastItem.Status != metav1.ConditionFalse {
+			role.Status.Conditions = append(role.Status.Conditions, condition)
+			err := r.Status().Update(ctx, role)
+			if err != nil {
+				roleLogger.Error(err, fmt.Sprintf("Resource status update failed for role `%s`", role.Name))
+			}
+		}
+	} else {
 		role.Status.Conditions = append(role.Status.Conditions, condition)
 		err := r.Status().Update(ctx, role)
 		if err != nil {

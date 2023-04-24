@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/part-of: database-operator
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: database-operator
-  name: role-sample1234567812345678123121dsadasdasdasdadas
+  name: role-sample
 spec:
   connectSecretRef:
     name: db-conn

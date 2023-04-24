@@ -21,36 +21,42 @@ const (
 	// ResourceCredentialsSecretDatabaseKey is the key inside a connection secret for the connection database
 	ResourceCredentialsSecretSSLModeKey = "sslmode"
 
-	// Status Type
+	// Status type for Role
 	CREATE = "Create"
 	SYNC   = "Sync"
 	FAIL   = "Fail"
 	DELETE = "Delete"
+
+	// Status type for Grant
+	GRANTDATABSE = "Database"
+	GRANTTABLE   = "Table"
+
+	RESOURCENOTFOUND = "ResourceNotFound"
+	CONNECTIONFAILED = "ConnectionFailed"
 )
 
-// A SecretReference is a reference to a secret in an arbitrary namespace.
-type SecretReference struct {
-	// Name of the secret.
+// A ResourceReference is a reference to a resource in an arbitrary namespace.
+type ResourceReference struct {
+	// Name of the resource.
 	Name string `json:"name"`
 
-	// Namespace of the secret.
+	// Namespace of the resource.
 	Namespace string `json:"namespace"`
 }
 
 // A SecretKeySelector is a reference to a secret key in an arbitrary namespace.
 type SecretKeySelector struct {
-	SecretReference `json:",inline"`
+	ResourceReference `json:",inline"`
 
 	// The key to select.
 	Key string `json:"key"`
 }
 
-func ConnectToPostgres(connectionSecret *corev1.Secret) (*sql.DB, error) {
+func ConnectToPostgres(connectionSecret *corev1.Secret, defaultDatabase string) (*sql.DB, error) {
 	endpoint := string(connectionSecret.Data[ResourceCredentialsSecretEndpointKey])
 	port := string(connectionSecret.Data[ResourceCredentialsSecretPortKey])
 	username := string(connectionSecret.Data[ResourceCredentialsSecretUserKey])
 	password := string(connectionSecret.Data[ResourceCredentialsSecretPasswordKey])
-	defaultDatabase := string(connectionSecret.Data[ResourceCredentialsSecretDatabaseKey])
 	sslMode := string(connectionSecret.Data[ResourceCredentialsSecretSSLModeKey])
 
 	if !(len(defaultDatabase) > 0) {

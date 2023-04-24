@@ -1,0 +1,20 @@
+apiVersion: postgresql.facets.cloud/v1alpha1
+kind: Grant
+metadata:
+  labels:
+    app.kubernetes.io/name: grant
+    app.kubernetes.io/instance: grant-sample
+    app.kubernetes.io/part-of: database-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: database-operator
+  name: grant-sample
+spec:
+  connectSecretRef:
+    name: db-conn
+    namespace: default
+  roleRef:
+    name: role-sample
+    namespace: default
+  privileges:
+    - ALL
+  database: tester

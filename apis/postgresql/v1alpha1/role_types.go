@@ -67,7 +67,7 @@ type RoleSpec struct {
 	// ConnectSecretRef references the secret that contains database details () used
 	// to create this role.
 	// +kubebuilder:validation:Required
-	ConnectSecretRef common.SecretReference `json:"connectSecretRef,omitempty"`
+	ConnectSecretRef common.ResourceReference `json:"connectSecretRef,omitempty"`
 
 	// PasswordSecretRef references the secret that contains the password used
 	// for this role.
