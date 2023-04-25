@@ -60,6 +60,9 @@ var (
 	grantDB     *sql.DB
 )
 
+// Grant type
+type grantType string
+
 // GrantReconciler reconciles a Grant object
 type GrantReconciler struct {
 	client.Client
@@ -153,7 +156,7 @@ func (r *GrantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			}
 		} else {
 			if controllerutil.ContainsFinalizer(grant, grantFinalizer) {
-				if _, _, _, _, err := r.RevokeGrant(ctx, grant, roleName, grantType, false, false); err != nil {
+				if _, _, _, _, err := r.RevokeGrant(ctx, grant, roleName, grantType, false); err != nil {
 					return ctrl.Result{}, err
 				}
 
@@ -173,19 +176,10 @@ func (r *GrantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		} else {
 			// Observe Grant State logic
 			lastItem := conditions[len(conditions)-1]
-			previousState := grant.Status.PreviousState
-			grantLogger.Info("++++++++++++++++++++++++++")
-			grantLogger.Info(fmt.Sprintf("Last Grant Type -  %s, Current Grant Type - %s", lastItem.Type, grantType))
-			grantLogger.Info("++++++++++++++++++++++++++")
-
 			if lastItem.Status == metav1.ConditionTrue {
-				if previousState.Type != grantType {
-					typeName, status, reason, _, _ := r.RevokeGrant(ctx, grant, roleName, previousState.Type, true, true)
-					r.appendGrantStatusCondition(ctx, grant, typeName, status, reason, fmt.Sprintf("Revoked previous grant for `%s` as new changes requesting grant for `%s`", previousState.Type, grantType))
-				}
 				isGrantStateSync := r.ObserveGrantState(ctx, grant, roleName, grantType)
 				if !isGrantStateSync {
-					typeName, status, reason, message, _ := r.RevokeGrant(ctx, grant, roleName, grantType, true, false)
+					typeName, status, reason, message, _ := r.RevokeGrant(ctx, grant, roleName, grantType, true)
 					r.appendGrantStatusCondition(ctx, grant, typeName, status, reason, errGrantUpdatedOutside)
 					typeName, status, reason, message = r.SyncGrant(ctx, grant, roleName, grantType)
 					r.appendGrantStatusCondition(ctx, grant, typeName, status, reason, message)
@@ -264,7 +258,7 @@ func (r *GrantReconciler) SyncGrant(ctx context.Context, grant *postgresql.Grant
 	return grantType, metav1.ConditionTrue, GRANTSYNCED, "Grant synced successfully"
 }
 
-func (r *GrantReconciler) RevokeGrant(ctx context.Context, grant *v1alpha1.Grant, roleName string, grantType string, notInSync bool, previousGrant bool) (string, metav1.ConditionStatus, string, string, error) {
+func (r *GrantReconciler) RevokeGrant(ctx context.Context, grant *v1alpha1.Grant, roleName string, grantType string, notInSync bool) (string, metav1.ConditionStatus, string, string, error) {
 	var revokeGrantQuery string
 	privileges := strings.Join(grant.Spec.Privileges, ", ")
 	database := *grant.Spec.Database
@@ -275,8 +269,6 @@ func (r *GrantReconciler) RevokeGrant(ctx context.Context, grant *v1alpha1.Grant
 	case common.GRANTDATABSE:
 		if notInSync {
 			revokeGrantQuery = fmt.Sprintf("REVOKE ALL ON DATABASE %s FROM \"%s\"", database, roleName)
-		} else if previousGrant {
-			revokeGrantQuery = fmt.Sprintf("REVOKE ALL ON DATABASE %s FROM \"%s\"", grant.Status.PreviousState.Database, roleName)
 		} else {
 			revokeGrantQuery = fmt.Sprintf("REVOKE %s ON DATABASE %s FROM \"%s\"", privileges, database, roleName)
 		}
@@ -285,16 +277,12 @@ func (r *GrantReconciler) RevokeGrant(ctx context.Context, grant *v1alpha1.Grant
 		if table == "ALL" {
 			if notInSync {
 				revokeGrantQuery = fmt.Sprintf("REVOKE ALL ON ALL TABLES IN SCHEMA %s FROM \"%s\"", schema, roleName)
-			} else if previousGrant {
-				revokeGrantQuery = fmt.Sprintf("REVOKE ALL ON ALL TABLES IN SCHEMA %s FROM \"%s\"", grant.Status.PreviousState.Schema, roleName)
 			} else {
 				revokeGrantQuery = fmt.Sprintf("REVOKE %s ON ALL TABLES IN SCHEMA %s FROM \"%s\"", privileges, schema, roleName)
 			}
 		} else {
 			if notInSync {
 				revokeGrantQuery = fmt.Sprintf("REVOKE ALL ON %s.%s FROM \"%s\"", schema, table, roleName)
-			} else if previousGrant {
-				revokeGrantQuery = fmt.Sprintf("REVOKE ALL ON %s.%s FROM \"%s\"", grant.Status.PreviousState.Schema, grant.Status.PreviousState.Table, roleName)
 			} else {
 				revokeGrantQuery = fmt.Sprintf("REVOKE %s ON %s.%s FROM \"%s\"", privileges, schema, table, roleName)
 			}
@@ -387,13 +375,6 @@ func (r *GrantReconciler) appendGrantStatusCondition(ctx context.Context, grant 
 	time := metav1.Time{Time: time.Now()}
 	condition := metav1.Condition{Type: typeName, Status: status, Reason: reason, Message: message, LastTransitionTime: time}
 
-	var previousState postgresql.PreviousState
-	if typeName == common.GRANTDATABSE {
-		previousState = postgresql.PreviousState{Type: typeName, Database: *grant.Spec.Database}
-	} else {
-		previousState = postgresql.PreviousState{Type: typeName, Schema: *grant.Spec.Schema, Table: *grant.Spec.Table}
-	}
-
 	grantStatusConditions := grant.Status.Conditions
 
 	if len(grantStatusConditions) > 0 {
@@ -407,7 +388,6 @@ func (r *GrantReconciler) appendGrantStatusCondition(ctx context.Context, grant 
 		getLastItem := grantStatusConditions[len(grantStatusConditions)-1]
 		if getLastItem.Reason != condition.Reason && getLastItem.Status != metav1.ConditionFalse {
 			grant.Status.Conditions = append(grant.Status.Conditions, condition)
-			grant.Status.PreviousState = previousState
 			err := r.Status().Update(ctx, grant)
 			if err != nil {
 				grantLogger.Error(err, fmt.Sprintf("Resource status update failed for grant `%s`", grant.Name))
@@ -415,7 +395,6 @@ func (r *GrantReconciler) appendGrantStatusCondition(ctx context.Context, grant 
 		}
 	} else {
 		grant.Status.Conditions = append(grant.Status.Conditions, condition)
-		grant.Status.PreviousState = previousState
 		err := r.Status().Update(ctx, grant)
 		if err != nil {
 			grantLogger.Error(err, fmt.Sprintf("Resource status update failed for grant `%s`", grant.Name))

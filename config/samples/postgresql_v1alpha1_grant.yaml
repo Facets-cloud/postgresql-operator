@@ -16,5 +16,5 @@ spec:
     name: role-sample
     namespace: default
   privileges:
-    - ALL
+    - CONNECT
   database: tester
