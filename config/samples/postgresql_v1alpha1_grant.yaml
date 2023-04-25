@@ -9,12 +9,12 @@ metadata:
     app.kubernetes.io/created-by: database-operator
   name: grant-sample
 spec:
-  connectSecretRef:
-    name: db-conn
-    namespace: default
   roleRef:
     name: role-sample
     namespace: default
   privileges:
-    - CONNECT
+    - SELECT
+    - INSERT
   database: tester
+  schema: public
+  table: ALL

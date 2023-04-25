@@ -19,8 +19,8 @@ package postgresql
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/lib/pq"
 	"github.com/pramodh-ayyappan/database-operator/apis/common"
 	"github.com/pramodh-ayyappan/database-operator/apis/postgresql/v1alpha1"
@@ -91,23 +92,6 @@ func (r *GrantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, nil
 	}
 
-	// Get Database connection secret
-	connectionSecret := &corev1.Secret{}
-	err = r.Get(ctx, types.NamespacedName{
-		Namespace: grant.Spec.ConnectSecretRef.Namespace,
-		Name:      grant.Spec.ConnectSecretRef.Name,
-	}, connectionSecret)
-	if err != nil {
-		reason := fmt.Sprintf(
-			"Failed to get connection secret `%s/%s` for grant `%s`",
-			grant.Spec.ConnectSecretRef.Name,
-			grant.Spec.ConnectSecretRef.Namespace,
-			grant.Name,
-		)
-		r.appendGrantStatusCondition(ctx, grant, common.FAIL, metav1.ConditionFalse, common.RESOURCENOTFOUND, err.Error())
-		grantLogger.Error(err, reason)
-	}
-
 	// Get Role resource
 	role := &postgresql.Role{}
 	err = r.Get(ctx, types.NamespacedName{
@@ -119,6 +103,23 @@ func (r *GrantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			"Failed to get role resource `%s/%s` for grant `%s`",
 			grant.Spec.RoleRef.Name,
 			grant.Spec.RoleRef.Namespace,
+			grant.Name,
+		)
+		r.appendGrantStatusCondition(ctx, grant, common.FAIL, metav1.ConditionFalse, common.RESOURCENOTFOUND, err.Error())
+		grantLogger.Error(err, reason)
+	}
+
+	// Get Database connection secret
+	connectionSecret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{
+		Namespace: role.Spec.ConnectSecretRef.Namespace,
+		Name:      role.Spec.ConnectSecretRef.Name,
+	}, connectionSecret)
+	if err != nil {
+		reason := fmt.Sprintf(
+			"Failed to get connection secret `%s/%s` for grant `%s`",
+			role.Spec.ConnectSecretRef.Name,
+			role.Spec.ConnectSecretRef.Namespace,
 			grant.Name,
 		)
 		r.appendGrantStatusCondition(ctx, grant, common.FAIL, metav1.ConditionFalse, common.RESOURCENOTFOUND, err.Error())
@@ -188,12 +189,13 @@ func (r *GrantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			// Observe Grant State logic
 			lastItem := conditions[len(conditions)-1]
 			if lastItem.Status == metav1.ConditionTrue {
-				if grant.Status.PreviousState.Type != grantType {
-					typeName, status, reason, _, _ := r.RevokeGrant(ctx, grant, roleName, grant.Status.PreviousState.Type, false, true)
+				previousStateType := grant.Status.PreviousState.Type
+				if previousStateType != grantType {
+					typeName, status, reason, _, _ := r.RevokeGrant(ctx, grant, roleName, previousStateType, false, true)
 					if status == metav1.ConditionTrue {
 						grant.Status.PreviousState = previousState
 					}
-					r.appendGrantStatusCondition(ctx, grant, typeName, status, reason, fmt.Sprintf("Revoked previous grant for `%s` as new changes requesting grant for `%s`", previousState.Type, grantType))
+					r.appendGrantStatusCondition(ctx, grant, typeName, status, reason, fmt.Sprintf("Revoked previous grant for `%s` as new changes requesting grant for `%s`", previousStateType, grantType))
 				}
 				isGrantStateSync := r.ObserveGrantState(ctx, grant, roleName, grantType)
 				if !isGrantStateSync {
@@ -260,7 +262,7 @@ func (r *GrantReconciler) SyncGrant(ctx context.Context, grant *postgresql.Grant
 
 	case common.GRANTTABLE:
 		if table == "ALL" {
-			createGrantQuery = fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO \"%s\"", privileges, schema, roleName)
+			createGrantQuery = fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE \"%s\" IN SCHEMA %s GRANT %s ON TABLES TO \"%s\"", roleName, schema, privileges, roleName)
 		} else {
 			createGrantQuery = fmt.Sprintf("GRANT %s ON %s.%s TO \"%s\"", privileges, schema, table, roleName)
 		}
@@ -296,11 +298,11 @@ func (r *GrantReconciler) RevokeGrant(ctx context.Context, grant *v1alpha1.Grant
 	case common.GRANTTABLE:
 		if table == "ALL" {
 			if notInSync {
-				revokeGrantQuery = fmt.Sprintf("REVOKE ALL ON ALL TABLES IN SCHEMA %s FROM \"%s\"", schema, roleName)
+				revokeGrantQuery = fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE \"%s\" IN SCHEMA %s REVOKE %s ON TABLES FROM \"%s\"", roleName, schema, privileges, roleName)
 			} else if previousGrant {
-				revokeGrantQuery = fmt.Sprintf("REVOKE ALL ON ALL TABLES IN SCHEMA %s FROM \"%s\"", grant.Status.PreviousState.Schema, roleName)
+				revokeGrantQuery = fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE \"%s\" IN SCHEMA %s REVOKE %s ON TABLES FROM \"%s\"", roleName, grant.Status.PreviousState.Schema, privileges, roleName)
 			} else {
-				revokeGrantQuery = fmt.Sprintf("REVOKE %s ON ALL TABLES IN SCHEMA %s FROM \"%s\"", privileges, schema, roleName)
+				revokeGrantQuery = fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE \"%s\" IN SCHEMA %s REVOKE %s ON TABLES FROM \"%s\"", roleName, schema, privileges, roleName)
 			}
 		} else {
 			if notInSync {
@@ -324,10 +326,7 @@ func (r *GrantReconciler) RevokeGrant(ctx context.Context, grant *v1alpha1.Grant
 }
 
 func (r *GrantReconciler) ObserveGrantState(ctx context.Context, grant *postgresql.Grant, roleName string, grantType string) bool {
-	var privileges interface {
-		driver.Valuer
-		sql.Scanner
-	}
+	var privileges []string
 	var selectGrantQuery string
 	database := *grant.Spec.Database
 	schema := *grant.Spec.Schema
@@ -337,9 +336,9 @@ func (r *GrantReconciler) ObserveGrantState(ctx context.Context, grant *postgres
 	switch grantType {
 	case common.GRANTDATABSE:
 		if grant.Spec.Privileges[0] == "ALL" {
-			privileges = pq.Array([]string{"CREATE", "CONNECT", "TEMPORARY"})
+			privileges = []string{"CREATE", "CONNECT", "TEMPORARY"}
 		} else {
-			privileges = pq.Array(grant.Spec.Privileges)
+			privileges = grant.Spec.Privileges
 		}
 
 		selectGrantQuery = "SELECT EXISTS(SELECT 1 FROM pg_database db, aclexplode(datacl) as acl INNER JOIN pg_roles s ON acl.grantee = s.oid WHERE db.datname = $1 AND s.rolname = $2 GROUP BY db.datname, s.rolname, acl.is_grantable HAVING array_agg(acl.privilege_type ORDER BY privilege_type ASC) = (SELECT array(SELECT unnest($3::text[]) as perms ORDER BY perms ASC)))"
@@ -347,7 +346,7 @@ func (r *GrantReconciler) ObserveGrantState(ctx context.Context, grant *postgres
 			selectGrantQuery,
 			database,
 			roleName,
-			privileges,
+			pq.Array(privileges),
 		).Scan(&isGrantStateChanged)
 		if err != nil {
 			grantLogger.Error(err, fmt.Sprintf("Failed to get grant `%s` when observing ", grant.Name))
@@ -356,35 +355,66 @@ func (r *GrantReconciler) ObserveGrantState(ctx context.Context, grant *postgres
 
 	case common.GRANTTABLE:
 		if grant.Spec.Privileges[0] == "ALL" {
-			privileges = pq.Array([]string{"INSERT", "SELECT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"})
+			privileges = []string{"INSERT", "SELECT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"}
 		} else {
-			privileges = pq.Array(grant.Spec.Privileges)
+			privileges = grant.Spec.Privileges
 		}
 
-		include_table := ""
 		if table == "ALL" {
-			include_table = ""
-		} else {
-			include_table = fmt.Sprintf("AND table_name='%s'", table)
-		}
+			selectGrantQuery = "SELECT aclexplode(da.defaclacl) as acl" +
+				" FROM pg_default_acl da" +
+				" INNER JOIN pg_namespace ns ON da.defaclnamespace = ns.oid" +
+				" INNER JOIN pg_roles r ON r.oid = da.defaclrole" +
+				" WHERE r.rolname = $1 AND ns.nspname = $2"
+			rows, err := grantDB.Query(
+				selectGrantQuery,
+				roleName,
+				schema,
+			)
 
-		selectGrantQuery = "SELECT EXISTS (SELECT 1" +
-			" FROM information_schema.role_table_grants" +
-			" WHERE grantee=$1" +
-			" AND table_schema=$2 " +
-			include_table +
-			" GROUP BY grantee, table_schema, table_name" +
-			" HAVING array_agg(privilege_type::text" +
-			" ORDER BY privilege_type ASC) = (SELECT array(SELECT unnest($3::text[]) as perms ORDER BY perms ASC)))"
-		err := grantDB.QueryRow(
-			selectGrantQuery,
-			roleName,
-			schema,
-			privileges,
-		).Scan(&isGrantStateChanged)
-		if err != nil {
-			grantLogger.Error(err, fmt.Sprintf("Failed to get grant `%s` when observing", grant.Name))
-			r.appendGrantStatusCondition(ctx, grant, common.FAIL, metav1.ConditionFalse, GRANTGETFAILED, err.Error())
+			var result string
+			var results []string
+			for rows.Next() {
+				err := rows.Scan(&result)
+				if err != nil {
+					grantLogger.Error(err, "Scanning rows failed")
+				}
+				result = strings.ReplaceAll(result, "(", "")
+				result = strings.ReplaceAll(result, ")", "")
+				result = strings.Split(result, ",")[2]
+				results = append(results, result)
+			}
+			sort.Sort(sort.StringSlice(privileges))
+			sort.Sort(sort.StringSlice(results))
+			if cmp.Equal(privileges, results) {
+				isGrantStateChanged = true
+			} else {
+				isGrantStateChanged = false
+			}
+			if err != nil {
+				grantLogger.Error(err, fmt.Sprintf("Failed to get grant `%s` when observing", grant.Name))
+				r.appendGrantStatusCondition(ctx, grant, common.FAIL, metav1.ConditionFalse, GRANTGETFAILED, err.Error())
+			}
+		} else {
+			selectGrantQuery = "SELECT EXISTS (SELECT 1" +
+				" FROM information_schema.role_table_grants" +
+				" WHERE grantee=$1" +
+				" AND table_schema=$2 " +
+				" AND table_name=$3" +
+				" GROUP BY grantee, table_schema, table_name" +
+				" HAVING array_agg(privilege_type::text" +
+				" ORDER BY privilege_type ASC) = (SELECT array(SELECT unnest($4::text[]) as perms ORDER BY perms ASC)))"
+			err := grantDB.QueryRow(
+				selectGrantQuery,
+				roleName,
+				schema,
+				table,
+				pq.Array(privileges),
+			).Scan(&isGrantStateChanged)
+			if err != nil {
+				grantLogger.Error(err, fmt.Sprintf("Failed to get grant `%s` when observing", grant.Name))
+				r.appendGrantStatusCondition(ctx, grant, common.FAIL, metav1.ConditionFalse, GRANTGETFAILED, err.Error())
+			}
 		}
 	}
 

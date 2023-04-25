@@ -47,7 +47,7 @@ import (
 
 const (
 	roleFinalizer           = "role.postgresql.facets.cloud/finalizer"
-	roleReconcileTime       = time.Duration(300 * time.Second)
+	roleReconcileTime       = time.Duration(10 * time.Second)
 	passwordSecretNameField = ".spec.passwordSecretRef.name"
 	connectSecretNameField  = ".spec.connectSecretRef.name"
 	errRoleAlreadyExists    = "Role already exists"
@@ -149,15 +149,66 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	defer roleDB.Close()
 
-	rolePassword := string(passwordSecret.Data[role.Spec.PasswordSecretRef.Key])
-	roleAnnotationPwdSecretVer := role.Annotations["passwordSecretVersion"]
-	if roleAnnotationPwdSecretVer != "" {
-		if roleAnnotationPwdSecretVer != passwordSecret.ResourceVersion {
-			typeName, status, reason, message := r.SyncRole(ctx, role, rolePassword, true)
+	if len(connectionSecret.Data) > 0 && len(passwordSecret.Data) > 0 {
+
+		// Sync updated password
+		rolePassword := string(passwordSecret.Data[role.Spec.PasswordSecretRef.Key])
+		roleAnnotationPwdSecretVer := role.Annotations["passwordSecretVersion"]
+		if roleAnnotationPwdSecretVer != "" {
+			if roleAnnotationPwdSecretVer != passwordSecret.ResourceVersion {
+				typeName, status, reason, message := r.SyncRole(ctx, role, rolePassword, true)
+				if status == metav1.ConditionTrue {
+					r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
+				} else {
+					if reason == ROLESYNCFAILED && message == errRoleDeletedOutside {
+						r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
+						typeName, status, reason, message = r.CreateRole(ctx, role, rolePassword)
+						r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
+					} else {
+						r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
+					}
+				}
+			}
+		}
+
+		// Add annotation for external secret update to be detected
+		passwordSecretVersion = passwordSecret.ResourceVersion
+		role.Annotations["passwordSecretVersion"] = passwordSecretVersion
+		r.Update(ctx, role)
+
+		// Add finalizers to handle delete scenario
+		if role.ObjectMeta.DeletionTimestamp.IsZero() {
+			if !controllerutil.ContainsFinalizer(role, roleFinalizer) {
+				controllerutil.AddFinalizer(role, roleFinalizer)
+				err = r.Update(ctx, role)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		} else {
+			if controllerutil.ContainsFinalizer(role, roleFinalizer) {
+				if _, _, _, _, err := r.DeletRole(ctx, role); err != nil {
+					return ctrl.Result{}, err
+				}
+
+				controllerutil.RemoveFinalizer(role, roleFinalizer)
+				err := r.Update(ctx, role)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+			return ctrl.Result{}, nil
+		}
+
+		// Manage Role based on conditions
+		if !(len(role.Status.Conditions) > 0) {
+			typeName, status, reason, message := r.CreateRole(ctx, role, rolePassword)
 			if status == metav1.ConditionTrue {
 				r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
 			} else {
-				if reason == ROLESYNCFAILED && message == errRoleDeletedOutside {
+				if reason == ROLECREATEFAILED && message == errRoleCreatedOutside {
+					r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
+					typeName, status, reason, message, _ := r.DeletRole(ctx, role)
 					r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
 					typeName, status, reason, message = r.CreateRole(ctx, role, rolePassword)
 					r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
@@ -165,67 +216,20 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 					r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
 				}
 			}
-		}
-	}
-
-	// Add annotation for external secret update to be detected
-	passwordSecretVersion = passwordSecret.ResourceVersion
-	role.Annotations["passwordSecretVersion"] = passwordSecretVersion
-	r.Update(ctx, role)
-
-	// Add finalizers to handle delete scenario
-	if role.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !controllerutil.ContainsFinalizer(role, roleFinalizer) {
-			controllerutil.AddFinalizer(role, roleFinalizer)
-			err = r.Update(ctx, role)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-	} else {
-		if controllerutil.ContainsFinalizer(role, roleFinalizer) {
-			if _, _, _, _, err := r.DeletRole(ctx, role); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			controllerutil.RemoveFinalizer(role, roleFinalizer)
-			err := r.Update(ctx, role)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{}, nil
-	}
-
-	// Manage Role based on conditions
-	if !(len(role.Status.Conditions) > 0) {
-		typeName, status, reason, message := r.CreateRole(ctx, role, rolePassword)
-		if status == metav1.ConditionTrue {
-			r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
 		} else {
-			if reason == ROLECREATEFAILED && message == errRoleCreatedOutside {
-				r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
-				typeName, status, reason, message, _ := r.DeletRole(ctx, role)
-				r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
-				typeName, status, reason, message = r.CreateRole(ctx, role, rolePassword)
-				r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
-			} else {
-				r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
-			}
-		}
-	} else {
-		isRoleStateInSync := r.ObserveRoleState(ctx, role)
-		if !isRoleStateInSync {
-			typeName, status, reason, message := r.SyncRole(ctx, role, rolePassword, false)
-			if status == metav1.ConditionTrue {
-				r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
-			} else {
-				if reason == ROLESYNCFAILED && message == errRoleDeletedOutside {
-					r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
-					typeName, status, reason, message = r.CreateRole(ctx, role, rolePassword)
+			isRoleStateInSync := r.ObserveRoleState(ctx, role)
+			if !isRoleStateInSync {
+				typeName, status, reason, message := r.SyncRole(ctx, role, rolePassword, false)
+				if status == metav1.ConditionTrue {
 					r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
 				} else {
-					r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
+					if reason == ROLESYNCFAILED && message == errRoleDeletedOutside {
+						r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
+						typeName, status, reason, message = r.CreateRole(ctx, role, rolePassword)
+						r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
+					} else {
+						r.appendRoleStatusCondition(ctx, role, typeName, status, reason, message)
+					}
 				}
 			}
 		}
@@ -409,7 +413,7 @@ func (r *RoleReconciler) appendRoleStatusCondition(ctx context.Context, role *po
 		}
 
 		getLastItem := roleStatusConditions[len(roleStatusConditions)-1]
-		if getLastItem.Reason != condition.Reason && getLastItem.Status != metav1.ConditionFalse {
+		if getLastItem.Reason != condition.Reason {
 			role.Status.Conditions = append(role.Status.Conditions, condition)
 			err := r.Status().Update(ctx, role)
 			if err != nil {

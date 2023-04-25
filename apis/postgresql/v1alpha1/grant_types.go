@@ -26,11 +26,6 @@ import (
 
 // GrantSpec defines the desired state of Grant
 type GrantSpec struct {
-	// ConnectSecretRef references the secret that contains database details () used
-	// to create this role.
-	// +kubebuilder:validation:Required
-	ConnectSecretRef common.ResourceReference `json:"connectSecretRef,omitempty"`
-
 	// Defines the role reference to grant permissions
 	// +kubebuilder:validation:Required
 	RoleRef common.ResourceReference `json:"roleRef,omitempty"`

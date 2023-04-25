@@ -53,20 +53,6 @@ spec:
           spec:
             description: GrantSpec defines the desired state of Grant
             properties:
-              connectSecretRef:
-                description: ConnectSecretRef references the secret that contains
-                  database details () used to create this role.
-                properties:
-                  name:
-                    description: Name of the resource.
-                    type: string
-                  namespace:
-                    description: Namespace of the resource.
-                    type: string
-                required:
-                - name
-                - namespace
-                type: object
               database:
                 description: Defines the Database to grant permission for a role
                 type: string
