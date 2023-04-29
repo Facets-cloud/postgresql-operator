@@ -51,10 +51,11 @@ type GrantSpec struct {
 
 // Store Previous state
 type PreviousState struct {
-	Type     string `json:"type,omitempty"`
-	Database string `json:"database,omitempty"`
-	Schema   string `json:"schema,omitempty"`
-	Table    string `json:"table,omitempty"`
+	Type       string   `json:"type,omitempty"`
+	Privileges []string `json:"privileges,omitempty"`
+	Database   string   `json:"database,omitempty"`
+	Schema     string   `json:"schema,omitempty"`
+	Table      string   `json:"table,omitempty"`
 }
 
 // GrantStatus defines the observed state of Grant
