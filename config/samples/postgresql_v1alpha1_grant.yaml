@@ -3,18 +3,15 @@ kind: Grant
 metadata:
   labels:
     app.kubernetes.io/name: grant
-    app.kubernetes.io/instance: grant-sample
+    app.kubernetes.io/instance: grant-noahpa
     app.kubernetes.io/part-of: database-operator
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: database-operator
-  name: grant-sample
+  name: grant-noahpa
 spec:
   roleRef:
-    name: role-sample
+    name: role-noahpa
     namespace: default
   privileges:
-    - SELECT
-    - INSERT
-  database: tester
-  schema: public
-  table: ALL
+    - CONNECT
+  database: noahpa

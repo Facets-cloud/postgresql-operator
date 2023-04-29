@@ -159,6 +159,10 @@ spec:
                 properties:
                   database:
                     type: string
+                  privileges:
+                    items:
+                      type: string
+                    type: array
                   schema:
                     type: string
                   table:
