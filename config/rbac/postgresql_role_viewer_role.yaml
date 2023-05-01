@@ -1,30 +1,26 @@
-# permissions for end users to edit roles.
+# permissions for end users to view roles.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
     app.kubernetes.io/name: clusterrole
-    app.kubernetes.io/instance: role-editor-role
+    app.kubernetes.io/instance: role-viewer-role
     app.kubernetes.io/component: rbac
     app.kubernetes.io/created-by: database-operator
     app.kubernetes.io/part-of: database-operator
     app.kubernetes.io/managed-by: kustomize
-  name: role-editor-role
+  name: role-viewer-role
 rules:
 - apiGroups:
-  - postgres.facets.cloud
+  - postgresql.facets.cloud
   resources:
   - roles
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
-  - postgres.facets.cloud
+  - postgresql.facets.cloud
   resources:
   - roles/status
   verbs:

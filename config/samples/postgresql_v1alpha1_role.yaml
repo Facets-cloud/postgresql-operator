@@ -1,0 +1,27 @@
+apiVersion: postgresql.facets.cloud/v1alpha1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/name: role
+    app.kubernetes.io/instance: role-noahpa
+    app.kubernetes.io/part-of: database-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: database-operator
+  name: role-noahpa
+spec:
+  connectSecretRef:
+    name: db-conn
+    namespace: default
+  passwordSecretRef:
+    namespace: default
+    name: db-conn
+    key: role_password
+  connectionLimit: 100
+  privileges:
+    bypassRls: false
+    createDb: false
+    createRole: false
+    inherit: false
+    login: true
+    replication: false
+    superUser: false

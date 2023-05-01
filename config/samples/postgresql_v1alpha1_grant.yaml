@@ -1,0 +1,20 @@
+apiVersion: postgresql.facets.cloud/v1alpha1
+kind: Grant
+metadata:
+  labels:
+    app.kubernetes.io/name: grant
+    app.kubernetes.io/instance: grant-noahpa
+    app.kubernetes.io/part-of: database-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: database-operator
+  name: grant-noahpa
+spec:
+  roleRef:
+    name: role-noahpa
+    namespace: default
+  privileges:
+    - INSERT
+    - UPDATE
+  database: noahpa
+  schema: public
+  table: ALL

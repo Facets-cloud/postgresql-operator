@@ -5,6 +5,7 @@
 domain: facets.cloud
 layout:
 - go.kubebuilder.io/v3
+multigroup: true
 plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
@@ -16,8 +17,17 @@ resources:
     namespaced: true
   controller: true
   domain: facets.cloud
-  group: postgres
+  group: postgresql
   kind: Role
-  path: github.com/pramodh-ayyappan/database-operator/api/v1alpha1
+  path: github.com/pramodh-ayyappan/database-operator/apis/postgresql/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: facets.cloud
+  group: postgresql
+  kind: Grant
+  path: github.com/pramodh-ayyappan/database-operator/apis/postgresql/v1alpha1
   version: v1alpha1
 version: "3"

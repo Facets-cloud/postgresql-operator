@@ -1,4 +1,5 @@
 ## Append samples you want in your CSV to this file as resources ##
 resources:
-- postgres_v1alpha1_role.yaml
+- postgresql_v1alpha1_role.yaml
+- postgresql_v1alpha1_grant.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples
