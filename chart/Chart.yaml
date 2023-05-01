@@ -1,0 +1,10 @@
+apiVersion: v2
+name: database-operator
+description: A Helm chart for database operator
+type: application
+version: 0.1.0
+appVersion: 1.1.0
+home: https://facets-cloud.github.io
+maintainers:
+  - name: Pramodh Ayyappan
+    email: pramodh.ayyappan@facets.cloud

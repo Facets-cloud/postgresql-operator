@@ -18,6 +18,7 @@ package postgresql
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"strings"
 	"time"
@@ -47,7 +48,6 @@ import (
 
 const (
 	roleFinalizer           = "role.postgresql.facets.cloud/finalizer"
-	roleReconcileTime       = time.Duration(10 * time.Second)
 	passwordSecretNameField = ".spec.passwordSecretRef.name"
 	connectSecretNameField  = ".spec.connectSecretRef.name"
 	errRoleAlreadyExists    = "Role already exists"
@@ -68,6 +68,7 @@ const (
 var (
 	roleLogger            = log.Log.WithName("role_controller")
 	roleDB                *sql.DB
+	roleReconcileTime     time.Duration
 	passwordSecretVersion string
 )
 
@@ -92,11 +93,16 @@ type RoleReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.14.1/pkg/reconcile
 func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-
 	roleLogger.WithValues("Request.Namespace", req.Namespace, "Request.Name", req.Name)
 
+	// Get reconcile time
+	roleReconcileTime, err := time.ParseDuration(flag.Lookup("reconcile-period").Value.String())
+	if err != nil {
+		panic(err)
+	}
+
 	role := &postgresql.Role{}
-	err := r.Get(ctx, req.NamespacedName, role)
+	err = r.Get(ctx, req.NamespacedName, role)
 	if err != nil {
 		return ctrl.Result{}, nil
 	}

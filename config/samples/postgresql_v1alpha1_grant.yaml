@@ -13,5 +13,8 @@ spec:
     name: role-noahpa
     namespace: default
   privileges:
-    - CONNECT
+    - INSERT
+    - UPDATE
   database: noahpa
+  schema: public
+  table: ALL
