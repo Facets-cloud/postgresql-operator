@@ -31,8 +31,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	postgresqlv1alpha1 "github.com/pramodh-ayyappan/database-operator/apis/postgresql/v1alpha1"
-	postgresqlcontrollers "github.com/pramodh-ayyappan/database-operator/controllers/postgresql"
+	postgresqlv1alpha1 "github.com/Facets-cloud/database-operator/apis/postgresql/v1alpha1"
+	postgresqlcontrollers "github.com/Facets-cloud/database-operator/controllers/postgresql"
 	//+kubebuilder:scaffold:imports
 )
 

@@ -34,10 +34,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/Facets-cloud/database-operator/apis/common"
+	postgresql "github.com/Facets-cloud/database-operator/apis/postgresql/v1alpha1"
 	"github.com/google/go-cmp/cmp"
 	"github.com/lib/pq"
-	"github.com/pramodh-ayyappan/database-operator/apis/common"
-	postgresql "github.com/pramodh-ayyappan/database-operator/apis/postgresql/v1alpha1"
 )
 
 const (

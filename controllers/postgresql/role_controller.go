@@ -37,10 +37,10 @@ import (
 
 	"database/sql"
 
+	"github.com/Facets-cloud/database-operator/apis/common"
+	"github.com/Facets-cloud/database-operator/apis/postgresql/v1alpha1"
+	postgresql "github.com/Facets-cloud/database-operator/apis/postgresql/v1alpha1"
 	_ "github.com/lib/pq"
-	"github.com/pramodh-ayyappan/database-operator/apis/common"
-	"github.com/pramodh-ayyappan/database-operator/apis/postgresql/v1alpha1"
-	postgresql "github.com/pramodh-ayyappan/database-operator/apis/postgresql/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"

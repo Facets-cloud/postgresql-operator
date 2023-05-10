@@ -1,4 +1,4 @@
-module github.com/pramodh-ayyappan/database-operator
+module github.com/Facets-cloud/database-operator
 
 go 1.19
 

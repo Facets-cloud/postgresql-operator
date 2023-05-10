@@ -10,7 +10,7 @@ plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: database-operator
-repo: github.com/pramodh-ayyappan/database-operator
+repo: github.com/Facets-cloud/database-operator
 resources:
 - api:
     crdVersion: v1
@@ -19,7 +19,7 @@ resources:
   domain: facets.cloud
   group: postgresql
   kind: Role
-  path: github.com/pramodh-ayyappan/database-operator/apis/postgresql/v1alpha1
+  path: github.com/Facets-cloud/database-operator/apis/postgresql/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -28,6 +28,6 @@ resources:
   domain: facets.cloud
   group: postgresql
   kind: Grant
-  path: github.com/pramodh-ayyappan/database-operator/apis/postgresql/v1alpha1
+  path: github.com/Facets-cloud/database-operator/apis/postgresql/v1alpha1
   version: v1alpha1
 version: "3"

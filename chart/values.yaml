@@ -32,7 +32,7 @@ controllerManager:
         drop:
         - ALL
     image:
-      repository: pramodhayyappan/database-operator
+      repository: pramodhfacets/database-operator
       tag: latest
     resources:
       limits:
