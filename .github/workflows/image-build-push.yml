@@ -34,4 +34,4 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.docker_meta.outputs.tags }},latest
+          tags: ${{ env.REGISTRY_IMAGE }}:${{ steps.docker_meta.outputs.tags }},${{ env.REGISTRY_IMAGE }}:latest
