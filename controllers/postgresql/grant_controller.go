@@ -21,6 +21,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -56,6 +57,7 @@ var (
 	grantLogger        = log.Log.WithName("grant_controller")
 	grantDB            *sql.DB
 	grantReconcileTime time.Duration
+	check_all          = regexp.MustCompile(`\*|ALL`)
 )
 
 // GrantReconciler reconciles a Grant object
@@ -334,7 +336,7 @@ func (r *GrantReconciler) CreateGrant(ctx context.Context, grantType string, gra
 	case common.GRANTDATABSE:
 		createGrantQuery = fmt.Sprintf("GRANT %s ON DATABASE %s TO \"%s\"", privileges, database, roleName)
 	case common.GRANTTABLE:
-		if table == "ALL" {
+		if check_all.MatchString(table) {
 			// Using `ALTER DEFAULT PRIVILEGES` allows you to set the privileges that will be applied to objects created in the future
 			// https://www.postgresql.org/docs/current/sql-alterdefaultprivileges.html
 			createGrantQuery = fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE \"%s\" IN SCHEMA %s GRANT %s ON TABLES TO \"%s\"", roleName, schema, privileges, roleName)
@@ -372,7 +374,7 @@ func (r *GrantReconciler) RevokeGrant(ctx context.Context, grantType string, gra
 		}
 
 	case common.GRANTTABLE:
-		if table == "ALL" {
+		if check_all.MatchString(table) {
 			if notInSync {
 				revokeGrantQuery = fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE \"%s\" IN SCHEMA %s REVOKE ALL ON TABLES FROM \"%s\"", roleName, schema, roleName)
 				// If previous state privileges and current privileges are same then there is a change in datavase outside of this operator
@@ -417,7 +419,7 @@ func (r *GrantReconciler) SyncGrant(ctx context.Context, grantType string, grant
 	case common.GRANTDATABSE:
 		createGrantQuery = fmt.Sprintf("GRANT %s ON DATABASE %s TO \"%s\"", privileges, database, roleName)
 	case common.GRANTTABLE:
-		if table == "ALL" {
+		if check_all.MatchString(table) {
 			// Using `ALTER DEFAULT PRIVILEGES` allows you to set the privileges that will be applied to objects created in the future
 			// https://www.postgresql.org/docs/current/sql-alterdefaultprivileges.html
 			createGrantQuery = fmt.Sprintf("ALTER DEFAULT PRIVILEGES FOR ROLE \"%s\" IN SCHEMA %s GRANT %s ON TABLES TO \"%s\"", roleName, schema, privileges, roleName)
@@ -442,7 +444,7 @@ func (r *GrantReconciler) ObserveGrantState(ctx context.Context, grant *postgres
 
 	switch grantType {
 	case common.GRANTDATABSE:
-		if privileges[0] == "ALL" {
+		if check_all.MatchString(privileges[0]) {
 			privileges = []string{"CREATE", "CONNECT", "TEMPORARY"}
 		}
 
@@ -459,11 +461,11 @@ func (r *GrantReconciler) ObserveGrantState(ctx context.Context, grant *postgres
 		}
 
 	case common.GRANTTABLE:
-		if privileges[0] == "ALL" {
+		if check_all.MatchString(privileges[0]) {
 			privileges = []string{"INSERT", "SELECT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"}
 		}
 
-		if table == "ALL" {
+		if check_all.MatchString(table) {
 			selectGrantQuery = "SELECT aclexplode(da.defaclacl) as acl" +
 				" FROM pg_default_acl da" +
 				" INNER JOIN pg_namespace ns ON da.defaclnamespace = ns.oid" +
