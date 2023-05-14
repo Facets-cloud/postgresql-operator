@@ -179,7 +179,9 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 		// Add annotation for external secret update to be detected
 		passwordSecretVersion = passwordSecret.ResourceVersion
-		role.Annotations["passwordSecretVersion"] = passwordSecretVersion
+		annotations := role.Annotations
+		annotations["passwordSecretVersion"] = passwordSecretVersion
+		role.Annotations = annotations
 		r.Update(ctx, role)
 
 		// Add finalizers to handle delete scenario
