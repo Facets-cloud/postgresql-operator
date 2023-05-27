@@ -68,6 +68,7 @@ type GrantStatus struct {
 //+kubebuilder:subresource:status
 
 // Grant is the Schema for the grants API
+// +kubebuilder:printcolumn:name="For Role",type=string,JSONPath=`.spec.roleRef.name`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[-1:].status`
 // +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.status.conditions[-1:].reason`
 // +kubebuilder:printcolumn:name="Message",type=string,priority=1,JSONPath=`.status.conditions[-1:].message`

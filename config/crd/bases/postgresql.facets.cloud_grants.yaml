@@ -16,6 +16,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.roleRef.name
+      name: For Role
+      type: string
     - jsonPath: .status.conditions[-1:].status
       name: Status
       type: string

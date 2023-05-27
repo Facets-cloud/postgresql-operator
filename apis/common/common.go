@@ -28,8 +28,8 @@ const (
 	DELETE = "Delete"
 
 	// Status type for Grant
-	GRANTDATABSE = "Database"
-	GRANTTABLE   = "Table"
+	GRANTDATABASE = "Database"
+	GRANTTABLE    = "Table"
 
 	RESOURCENOTFOUND = "ResourceNotFound"
 	CONNECTIONFAILED = "ConnectionFailed"
