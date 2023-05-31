@@ -19,6 +19,7 @@ package postgresql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"regexp"
@@ -31,9 +32,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/Facets-cloud/database-operator/apis/common"
 	postgresql "github.com/Facets-cloud/database-operator/apis/postgresql/v1alpha1"
@@ -128,6 +131,20 @@ func (r *GrantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		)
 		r.appendGrantStatusCondition(ctx, grant, common.FAIL, metav1.ConditionFalse, common.RESOURCENOTFOUND, err.Error())
 		grantLogger.Error(err, reason)
+		return ctrl.Result{}, nil
+	}
+
+	// Check if any Database Conenction secret value is empty
+	isEmpty, requiredSecretKeys := common.IsSecretsValueEmtpy(connectionSecret)
+	if isEmpty {
+		message := fmt.Sprintf(
+			"The value for required keys `%s` in secret `%s/%s` should not be empty or null.",
+			requiredSecretKeys,
+			role.Spec.ConnectSecretRef.Namespace,
+			role.Spec.ConnectSecretRef.Name,
+		)
+		r.appendGrantStatusCondition(ctx, grant, common.FAIL, metav1.ConditionFalse, common.RESOURCENOTFOUND, message)
+		grantLogger.Error(errors.New(message), "Please update the keys in secret with right values")
 		return ctrl.Result{}, nil
 	}
 
@@ -404,7 +421,7 @@ func (r *GrantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 // SetupWithManager sets up the controller with the Manager.
 func (r *GrantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&postgresql.Grant{}).
+		For(&postgresql.Grant{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }
 

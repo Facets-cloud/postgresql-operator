@@ -18,6 +18,7 @@ package postgresql
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"strings"
@@ -144,6 +145,36 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		roleLogger.Error(err, reason)
 	}
 
+	// Role Password
+	rolePassword := string(passwordSecret.Data[role.Spec.PasswordSecretRef.Key])
+
+	// Check if Role Password secret value is empty
+	if len(strings.TrimSpace(rolePassword)) <= 0 {
+		message := fmt.Sprintf(
+			"The value for required key `%s` in secret `%s/%s` should not be empty or null.",
+			role.Spec.PasswordSecretRef.Key,
+			role.Spec.PasswordSecretRef.Namespace,
+			role.Spec.PasswordSecretRef.Name,
+		)
+		r.appendRoleStatusCondition(ctx, role, common.FAIL, metav1.ConditionFalse, common.RESOURCENOTFOUND, message)
+		roleLogger.Error(errors.New(message), "Please update the role password in secret with right values")
+		return ctrl.Result{}, nil
+	}
+
+	// Check if any Database Conenction secret value is empty
+	isEmpty, requiredSecretKeys := common.IsSecretsValueEmtpy(connectionSecret)
+	if isEmpty {
+		message := fmt.Sprintf(
+			"The value for required keys `%s` in secret `%s/%s` should not be empty or null.",
+			requiredSecretKeys,
+			role.Spec.ConnectSecretRef.Namespace,
+			role.Spec.ConnectSecretRef.Name,
+		)
+		r.appendRoleStatusCondition(ctx, role, common.FAIL, metav1.ConditionFalse, common.RESOURCENOTFOUND, message)
+		roleLogger.Error(errors.New(message), "Please update the keys in secret with right values")
+		return ctrl.Result{}, nil
+	}
+
 	// Connect to Postgres DB
 	defaultDatabase := string(connectionSecret.Data[common.ResourceCredentialsSecretDatabaseKey])
 	roleDB, err = common.ConnectToPostgres(connectionSecret, defaultDatabase)
@@ -158,7 +189,6 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if len(connectionSecret.Data) > 0 && len(passwordSecret.Data) > 0 {
 
 		// Sync updated password
-		rolePassword := string(passwordSecret.Data[role.Spec.PasswordSecretRef.Key])
 		roleAnnotationPwdSecretVer := role.Annotations["passwordSecretVersion"]
 		if roleAnnotationPwdSecretVer != "" {
 			if roleAnnotationPwdSecretVer != passwordSecret.ResourceVersion {

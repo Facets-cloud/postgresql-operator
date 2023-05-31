@@ -3,6 +3,7 @@ package common
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -80,4 +81,51 @@ func ConnectToPostgres(connectionSecret *corev1.Secret, defaultDatabase string) 
 	db, err := sql.Open("postgres", psqlInfo)
 
 	return db, err
+}
+
+func IsSecretsValueEmtpy(connectionSecret *corev1.Secret) (bool, string) {
+	endpoint := string(connectionSecret.Data[ResourceCredentialsSecretEndpointKey])
+	port := string(connectionSecret.Data[ResourceCredentialsSecretPortKey])
+	username := string(connectionSecret.Data[ResourceCredentialsSecretUserKey])
+	password := string(connectionSecret.Data[ResourceCredentialsSecretPasswordKey])
+
+	boolList := []bool{}
+	requriedKeysList := []string{}
+
+	// This approach is done for a reason because their secret can have any keys
+	// So only checking the keys we require is empty or not instead of looping though all the keys in secret
+	if len(strings.TrimSpace(endpoint)) > 0 {
+		boolList = append(boolList, false)
+	} else {
+		boolList = append(boolList, true)
+		requriedKeysList = append(requriedKeysList, ResourceCredentialsSecretEndpointKey)
+	}
+
+	if len(strings.TrimSpace(port)) > 0 {
+		boolList = append(boolList, false)
+	} else {
+		boolList = append(boolList, true)
+		requriedKeysList = append(requriedKeysList, ResourceCredentialsSecretPortKey)
+	}
+
+	if len(strings.TrimSpace(username)) > 0 {
+		boolList = append(boolList, false)
+	} else {
+		boolList = append(boolList, true)
+		requriedKeysList = append(requriedKeysList, ResourceCredentialsSecretUserKey)
+	}
+
+	if len(strings.TrimSpace(password)) > 0 {
+		boolList = append(boolList, false)
+	} else {
+		boolList = append(boolList, true)
+		requriedKeysList = append(requriedKeysList, ResourceCredentialsSecretPasswordKey)
+	}
+
+	for _, item := range boolList {
+		if !item {
+			return true, strings.Join(requriedKeysList, ", ")
+		}
+	}
+	return false, "None"
 }

@@ -25,15 +25,14 @@ controllerManager:
     - --health-probe-bind-address=:8081
     - --metrics-bind-address=127.0.0.1:8080
     - --leader-elect
-    - --reconcile-period=10m
     containerSecurityContext:
       allowPrivilegeEscalation: false
       capabilities:
         drop:
         - ALL
     image:
-      repository: pramodhfacets/database-operator
-      tag: latest
+      repository: pramodhayyappan/database-operator
+      tag: v0.1
     resources:
       limits:
         cpu: 500m

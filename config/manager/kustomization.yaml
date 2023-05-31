@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: pramodhayyappan/database-operator
-  newTag: v0.1
+  newTag: latest

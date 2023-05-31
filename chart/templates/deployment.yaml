@@ -11,7 +11,7 @@ metadata:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "chart.fullname" . }}-controller
+  name: {{ include "chart.fullname" . }}-controller-manager
   labels:
     app.kubernetes.io/component: manager
     app.kubernetes.io/created-by: database-operator
