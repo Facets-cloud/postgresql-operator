@@ -95,30 +95,30 @@ func IsSecretsValueEmtpy(connectionSecret *corev1.Secret) (bool, string) {
 	// This approach is done for a reason because their secret can have any keys
 	// So only checking the keys we require is empty or not instead of looping though all the keys in secret
 	if len(strings.TrimSpace(endpoint)) > 0 {
-		boolList = append(boolList, false)
-	} else {
 		boolList = append(boolList, true)
+	} else {
+		boolList = append(boolList, false)
 		requriedKeysList = append(requriedKeysList, ResourceCredentialsSecretEndpointKey)
 	}
 
 	if len(strings.TrimSpace(port)) > 0 {
-		boolList = append(boolList, false)
-	} else {
 		boolList = append(boolList, true)
+	} else {
+		boolList = append(boolList, false)
 		requriedKeysList = append(requriedKeysList, ResourceCredentialsSecretPortKey)
 	}
 
 	if len(strings.TrimSpace(username)) > 0 {
-		boolList = append(boolList, false)
-	} else {
 		boolList = append(boolList, true)
+	} else {
+		boolList = append(boolList, false)
 		requriedKeysList = append(requriedKeysList, ResourceCredentialsSecretUserKey)
 	}
 
 	if len(strings.TrimSpace(password)) > 0 {
-		boolList = append(boolList, false)
-	} else {
 		boolList = append(boolList, true)
+	} else {
+		boolList = append(boolList, false)
 		requriedKeysList = append(requriedKeysList, ResourceCredentialsSecretPasswordKey)
 	}
 
