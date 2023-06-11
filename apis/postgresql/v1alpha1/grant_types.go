@@ -17,7 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/Facets-cloud/database-operator/apis/common"
+	"github.com/Facets-cloud/postgresql-operator/apis/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

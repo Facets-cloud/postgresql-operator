@@ -1,6 +1,6 @@
 apiVersion: v2
-name: database-operator
-description: A Helm chart for database operator
+name: postgresql-operator
+description: A Helm chart for postgresql operator
 type: application
 version: 1.0.1
 appVersion: 1.0.1

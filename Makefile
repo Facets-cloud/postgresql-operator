@@ -28,8 +28,8 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 # This variable is used to construct full image tags for bundle and catalog images.
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
-# facets.cloud/database-operator-bundle:$VERSION and facets.cloud/database-operator-catalog:$VERSION.
-IMAGE_TAG_BASE ?= facets.cloud/database-operator
+# facets.cloud/postgresql-operator-bundle:$VERSION and facets.cloud/postgresql-operator-catalog:$VERSION.
+IMAGE_TAG_BASE ?= facets.cloud/postgresql-operator
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
@@ -268,4 +268,8 @@ $(HELMIFY): $(LOCALBIN)
 	test -s $(LOCALBIN)/helmify || GOBIN=$(LOCALBIN) go install github.com/arttor/helmify/cmd/helmify@latest
 
 helm: manifests kustomize helmify
-	$(KUSTOMIZE) build config/default | $(HELMIFY)
+	$(KUSTOMIZE) build config/default | $(HELMIFY) chart/postgresql-operator
+
+.PHONY: generate-crd-docs
+generate-crd-docs: ## Generate CRD documentation to docs/crd.md
+	crd-ref-docs --source-path=./apis/postgresql/v1alpha1 --config=docs/config.yaml --renderer=markdown --output-path=docs/crd.md

@@ -2,12 +2,12 @@ apiVersion: postgresql.facets.cloud/v1alpha1
 kind: Role
 metadata:
   labels:
-    app.kubernetes.io/name: role
-    app.kubernetes.io/instance: role-noahpa
+    app.kubernetes.io/name: test-role
+    app.kubernetes.io/instance: test-role
     app.kubernetes.io/part-of: postgresql-operator
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: postgresql-operator
-  name: role-noahpa
+  name: test-role
 spec:
   connectSecretRef:
     name: db-conn

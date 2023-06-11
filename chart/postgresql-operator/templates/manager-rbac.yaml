@@ -1,9 +1,9 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "chart.fullname" . }}-manager-role
+  name: {{ include "postgresql-operator.fullname" . }}-manager-role
   labels:
-  {{- include "chart.labels" . | nindent 4 }}
+  {{- include "postgresql-operator.labels" . | nindent 4 }}
 rules:
 - apiGroups:
   - ""
@@ -69,17 +69,17 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "chart.fullname" . }}-manager-rolebinding
+  name: {{ include "postgresql-operator.fullname" . }}-manager-rolebinding
   labels:
     app.kubernetes.io/component: rbac
-    app.kubernetes.io/created-by: database-operator
-    app.kubernetes.io/part-of: database-operator
-  {{- include "chart.labels" . | nindent 4 }}
+    app.kubernetes.io/created-by: postgresql-operator
+    app.kubernetes.io/part-of: postgresql-operator
+  {{- include "postgresql-operator.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: '{{ include "chart.fullname" . }}-manager-role'
+  name: '{{ include "postgresql-operator.fullname" . }}-manager-role'
 subjects:
 - kind: ServiceAccount
-  name: '{{ include "chart.fullname" . }}-controller-manager'
+  name: '{{ include "postgresql-operator.fullname" . }}-controller-manager'
   namespace: '{{ .Release.Namespace }}'

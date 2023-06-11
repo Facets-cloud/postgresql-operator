@@ -1,0 +1,19 @@
+apiVersion: postgresql.facets.cloud/v1alpha1
+kind: Grant
+metadata:
+  labels:
+    app.kubernetes.io/name: test-grant
+    app.kubernetes.io/instance: test-grant
+    app.kubernetes.io/part-of: database-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: database-operator
+  name: test-grant
+spec:
+  roleRef:
+    name: test-role
+    namespace: default
+  privileges:
+    - INSERT
+  database: test-db
+  schema: public
+  table: ALL

@@ -38,8 +38,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	"github.com/Facets-cloud/database-operator/apis/common"
-	postgresql "github.com/Facets-cloud/database-operator/apis/postgresql/v1alpha1"
+	"github.com/Facets-cloud/postgresql-operator/apis/common"
+	postgresql "github.com/Facets-cloud/postgresql-operator/apis/postgresql/v1alpha1"
 	"github.com/google/go-cmp/cmp"
 	"github.com/lib/pq"
 )

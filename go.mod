@@ -1,4 +1,4 @@
-module github.com/Facets-cloud/database-operator
+module github.com/Facets-cloud/postgresql-operator
 
 go 1.19
 

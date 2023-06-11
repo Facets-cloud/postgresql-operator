@@ -6,8 +6,8 @@ metadata:
     app.kubernetes.io/name: clusterrole
     app.kubernetes.io/instance: grant-viewer-role
     app.kubernetes.io/component: rbac
-    app.kubernetes.io/created-by: database-operator
-    app.kubernetes.io/part-of: database-operator
+    app.kubernetes.io/created-by: postgresql-operator
+    app.kubernetes.io/part-of: postgresql-operator
     app.kubernetes.io/managed-by: kustomize
   name: grant-viewer-role
 rules:

@@ -1,24 +1,21 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: grants.postgresql.facets.cloud
+  name: roles.postgresql.facets.cloud
   annotations:
     controller-gen.kubebuilder.io/version: v0.11.1
   labels:
-  {{- include "chart.labels" . | nindent 4 }}
+  {{- include "postgresql-operator.labels" . | nindent 4 }}
 spec:
   group: postgresql.facets.cloud
   names:
-    kind: Grant
-    listKind: GrantList
-    plural: grants
-    singular: grant
+    kind: Role
+    listKind: RoleList
+    plural: roles
+    singular: role
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.roleRef.name
-      name: For Role
-      type: string
     - jsonPath: .status.conditions[-1:].status
       name: Status
       type: string
@@ -39,7 +36,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Grant is the Schema for the grants API
+        description: Role is the Schema for the roles API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -54,18 +51,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: GrantSpec defines the desired state of Grant
+            description: RoleSpec defines the desired state of Role
             properties:
-              database:
-                description: Defines the Database to grant permission for a role
-                type: string
-              privileges:
-                description: Defines the list of permissions to grant for a role
-                items:
-                  type: string
-                type: array
-              roleRef:
-                description: Defines the role reference to grant permissions
+              connectSecretRef:
+                description: ConnectSecretRef references the secret that contains database
+                  details () used to create this role.
                 properties:
                   name:
                     description: Name of the resource.
@@ -77,17 +67,70 @@ spec:
                 - name
                 - namespace
                 type: object
-              schema:
-                default: ""
-                description: Defines the Schema to grant permission for a role
-                type: string
-              table:
-                default: ""
-                description: Defines the Database to grant permission for a role
-                type: string
+              connectionLimit:
+                default: 100
+                description: ConnectionLimit to be applied to the role.
+                format: int32
+                type: integer
+              passwordSecretRef:
+                description: PasswordSecretRef references the secret that contains the
+                  password used for this role.
+                properties:
+                  key:
+                    description: The key to select.
+                    type: string
+                  name:
+                    description: Name of the resource.
+                    type: string
+                  namespace:
+                    description: Namespace of the resource.
+                    type: string
+                required:
+                - key
+                - name
+                - namespace
+                type: object
+              privileges:
+                description: Privileges to be granted.
+                properties:
+                  bypassRls:
+                    default: false
+                    description: BypassRls grants BYPASSRLS when true, allowing the
+                      role to bypass row-level security policies.
+                    type: boolean
+                  createDb:
+                    default: false
+                    description: CreateDb grants CREATEDB when true, allowing the role
+                      to create databases.
+                    type: boolean
+                  createRole:
+                    default: false
+                    description: CreateRole grants CREATEROLE when true, allowing this
+                      role to create other roles.
+                    type: boolean
+                  inherit:
+                    default: false
+                    description: Inherit grants INHERIT when true, allowing the role
+                      to inherit permissions from other roles it is a member of.
+                    type: boolean
+                  login:
+                    default: true
+                    description: Login grants LOGIN when true, allowing the role to
+                      login to the server.
+                    type: boolean
+                  replication:
+                    default: false
+                    description: Replication grants REPLICATION when true, allowing
+                      the role to connect in replication mode.
+                    type: boolean
+                  superUser:
+                    default: false
+                    description: SuperUser grants SUPERUSER privilege when true.
+                    type: boolean
+                type: object
             type: object
           status:
-            description: GrantStatus defines the observed state of Grant
+            description: RoleStatus defines the observed state of Role
             properties:
               conditions:
                 items:
@@ -157,25 +200,8 @@ spec:
                   - type
                   type: object
                 type: array
-              previousState:
-                description: Store Previous state
-                properties:
-                  database:
-                    type: string
-                  privileges:
-                    items:
-                      type: string
-                    type: array
-                  schema:
-                    type: string
-                  table:
-                    type: string
-                  type:
-                    type: string
-                type: object
             required:
             - conditions
-            - previousState
             type: object
         type: object
     served: true
