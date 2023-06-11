@@ -101,7 +101,7 @@ _Appears in:_
 | `privileges` _[RolePrivilege](#roleprivilege)_                | Privileges to be granted.                                                                          |
 
 
-##### ResourceReference
+#### ResourceReference
 
 The Database Connection details secret selector
 
