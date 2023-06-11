@@ -32,7 +32,7 @@ controllerManager:
         drop:
         - ALL
     image:
-      repository: pramodhayyappan/postgresql-operator
+      repository: pramodhfacets/postgresql-operator
       tag: latest
     resources:
       limits:
