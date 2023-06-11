@@ -75,7 +75,7 @@ spec:
   table: ALL
 ```
 
-For more examples, kindly check [here](config/samples/)
+For more examples, kindly check [here](examples)
 
 ### Running on the cluster
 
