@@ -224,7 +224,7 @@ func (r *GrantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 								return ctrl.Result{}, nil
 							}
 						} else if currentGrantType == common.GRANTTABLE {
-							if check_all.MatchString(*existingGrant.Spec.Table) {
+							if check_all.MatchString(*existingGrant.Spec.Table) && existingGrant.Spec.Schema != grant.Spec.Schema{
 								reason := fmt.Sprintf(
 									"Already a grant `%s/%s` created with ALL tables permission for role `%s/%s`. So delete this grant `%s/%s`",
 									existingGrant.Namespace,
@@ -237,7 +237,7 @@ func (r *GrantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 								r.appendGrantStatusCondition(ctx, grant, common.FAIL, metav1.ConditionFalse, GRANTDUPLICATED, reason)
 								grantLogger.Error(err, reason)
 								return ctrl.Result{}, nil
-							} else if existingGrant.Spec.Table == grant.Spec.Table {
+							} else if existingGrant.Spec.Table == grant.Spec.Table && existingGrant.Spec.Schema != grant.Spec.Schema{
 								reason := fmt.Sprintf(
 									"Already a grant `%s/%s` created with `%s` table permission for role `%s/%s`. So delete this grant `%s/%s`",
 									existingGrant.Namespace,
