@@ -224,7 +224,7 @@ func (r *GrantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 								return ctrl.Result{}, nil
 							}
 						} else if currentGrantType == common.GRANTTABLE {
-							if check_all.MatchString(*existingGrant.Spec.Table) && existingGrant.Spec.Schema != grant.Spec.Schema{
+							if check_all.MatchString(*existingGrant.Spec.Table) && existingGrant.Spec.Schema != grant.Spec.Schema {
 								reason := fmt.Sprintf(
 									"Already a grant `%s/%s` created with ALL tables permission for role `%s/%s`. So delete this grant `%s/%s`",
 									existingGrant.Namespace,
@@ -237,7 +237,7 @@ func (r *GrantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 								r.appendGrantStatusCondition(ctx, grant, common.FAIL, metav1.ConditionFalse, GRANTDUPLICATED, reason)
 								grantLogger.Error(err, reason)
 								return ctrl.Result{}, nil
-							} else if existingGrant.Spec.Table == grant.Spec.Table && existingGrant.Spec.Schema != grant.Spec.Schema{
+							} else if existingGrant.Spec.Table == grant.Spec.Table && existingGrant.Spec.Schema != grant.Spec.Schema {
 								reason := fmt.Sprintf(
 									"Already a grant `%s/%s` created with `%s` table permission for role `%s/%s`. So delete this grant `%s/%s`",
 									existingGrant.Namespace,
@@ -436,7 +436,10 @@ func (r *GrantReconciler) CreateGrant(ctx context.Context, grantType string, gra
 			// https://www.postgresql.org/docs/current/sql-alterdefaultprivileges.html
 			createGrantQueryForFutureTables := fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT %s ON TABLES TO \"%s\"", schema, privileges, roleName)
 			createGrantQueryForExistingTables := fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO \"%s\"", privileges, schema, roleName)
-			createGrantQuery = strings.Join([]string{createGrantQueryForFutureTables, createGrantQueryForExistingTables}, "; ")
+			createGrantSeqQueryForFutureTables := fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT %s ON SEQUENCES TO \"%s\"", schema, privileges, roleName)
+			createGrantSeqQueryForExistingTables := fmt.Sprintf("GRANT %s ON ALL SEQUENCES IN SCHEMA %s TO \"%s\"", privileges, schema, roleName)
+
+			createGrantQuery = strings.Join([]string{createGrantQueryForFutureTables, createGrantQueryForExistingTables, createGrantSeqQueryForFutureTables, createGrantSeqQueryForExistingTables}, "; ")
 		} else {
 			createGrantQuery = fmt.Sprintf("GRANT %s ON %s.%s TO \"%s\"", privileges, schema, table, roleName)
 		}
@@ -475,7 +478,9 @@ func (r *GrantReconciler) RevokeGrant(ctx context.Context, grantType string, gra
 			if notInSync {
 				revokeGrantQueryForFutureTables := fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA %s REVOKE ALL ON TABLES FROM \"%s\"", schema, roleName)
 				revokeGrantQueryForExistingTables := fmt.Sprintf("REVOKE ALL ON ALL TABLES IN SCHEMA %s FROM \"%s\"", schema, roleName)
-				revokeGrantQuery = strings.Join([]string{revokeGrantQueryForFutureTables, revokeGrantQueryForExistingTables}, "; ")
+				revokeGrantSeqQueryForFutureTables := fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA %s REVOKE ALL ON SEQUENCES FROM \"%s\"", schema, roleName)
+				revokeGrantSeqQueryForExistingTables := fmt.Sprintf("REVOKE ALL ON ALL SEQUENCES IN SCHEMA %s FROM \"%s\"", schema, roleName)
+				revokeGrantQuery = strings.Join([]string{revokeGrantQueryForFutureTables, revokeGrantQueryForExistingTables, revokeGrantSeqQueryForFutureTables, revokeGrantSeqQueryForExistingTables}, "; ")
 				// If previous state privileges and current privileges are same then there is a change in datavase outside of this operator
 				if cmp.Equal(privilegesMap["currentPrivileges"], privilegesMap["previousStatePrivileges"]) {
 					message = "Grant revoked successfully as grant got updated outside of database operator"
@@ -525,7 +530,9 @@ func (r *GrantReconciler) SyncGrant(ctx context.Context, grantType string, grant
 			// https://www.postgresql.org/docs/current/sql-alterdefaultprivileges.html
 			syncGrantQueryForFutureTables := fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT %s ON TABLES TO \"%s\"", schema, privileges, roleName)
 			syncGrantQueryForExistingTables := fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO \"%s\"", privileges, schema, roleName)
-			syncGrantQuery = strings.Join([]string{syncGrantQueryForFutureTables, syncGrantQueryForExistingTables}, "; ")
+			syncGrantSeqQueryForFutureTables := fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT %s ON SEQUENCES TO \"%s\"", schema, privileges, roleName)
+			syncGrantSeqQueryForExistingTables := fmt.Sprintf("GRANT %s ON ALL SEQUENCES IN SCHEMA %s TO \"%s\"", privileges, schema, roleName)
+			syncGrantQuery = strings.Join([]string{syncGrantQueryForFutureTables, syncGrantQueryForExistingTables, syncGrantSeqQueryForFutureTables, syncGrantSeqQueryForExistingTables}, "; ")
 		} else {
 			syncGrantQuery = fmt.Sprintf("GRANT %s ON %s.%s TO \"%s\"", privileges, schema, table, roleName)
 		}
