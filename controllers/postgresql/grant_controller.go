@@ -27,6 +27,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slices"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -224,7 +226,7 @@ func (r *GrantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 								return ctrl.Result{}, nil
 							}
 						} else if currentGrantType == common.GRANTTABLE {
-							if check_all.MatchString(*existingGrant.Spec.Table) && existingGrant.Spec.Schema != grant.Spec.Schema {
+							if check_all.MatchString(*existingGrant.Spec.Table) && existingGrant.Spec.Schema == grant.Spec.Schema {
 								reason := fmt.Sprintf(
 									"Already a grant `%s/%s` created with ALL tables permission for role `%s/%s`. So delete this grant `%s/%s`",
 									existingGrant.Namespace,
@@ -237,7 +239,7 @@ func (r *GrantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 								r.appendGrantStatusCondition(ctx, grant, common.FAIL, metav1.ConditionFalse, GRANTDUPLICATED, reason)
 								grantLogger.Error(err, reason)
 								return ctrl.Result{}, nil
-							} else if existingGrant.Spec.Table == grant.Spec.Table && existingGrant.Spec.Schema != grant.Spec.Schema {
+							} else if existingGrant.Spec.Table == grant.Spec.Table && existingGrant.Spec.Schema == grant.Spec.Schema {
 								reason := fmt.Sprintf(
 									"Already a grant `%s/%s` created with `%s` table permission for role `%s/%s`. So delete this grant `%s/%s`",
 									existingGrant.Namespace,
@@ -572,7 +574,7 @@ func (r *GrantReconciler) ObserveGrantState(ctx context.Context, grant *postgres
 
 	case common.GRANTTABLE:
 		if check_all.MatchString(privileges[0]) {
-			privileges = []string{"INSERT", "SELECT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"}
+			privileges = []string{"INSERT", "SELECT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER", "USAGE"}
 		}
 
 		if check_all.MatchString(table) {
@@ -603,6 +605,8 @@ func (r *GrantReconciler) ObserveGrantState(ctx context.Context, grant *postgres
 			}
 			sort.Sort(sort.StringSlice(privileges))
 			sort.Sort(sort.StringSlice(futureTablesResults))
+			privileges = slices.Compact(privileges)
+			futureTablesResults = slices.Compact(futureTablesResults)
 			if cmp.Equal(privileges, futureTablesResults) {
 				isGrantStateNotChanged = true
 			} else {
