@@ -42,6 +42,7 @@ import (
 
 	"github.com/Facets-cloud/postgresql-operator/apis/common"
 	postgresql "github.com/Facets-cloud/postgresql-operator/apis/postgresql/v1alpha1"
+	"github.com/Facets-cloud/postgresql-operator/utility"
 	"github.com/google/go-cmp/cmp"
 	"github.com/lib/pq"
 )
@@ -438,10 +439,14 @@ func (r *GrantReconciler) CreateGrant(ctx context.Context, grantType string, gra
 			// https://www.postgresql.org/docs/current/sql-alterdefaultprivileges.html
 			createGrantQueryForFutureTables := fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT %s ON TABLES TO \"%s\"", schema, privileges, roleName)
 			createGrantQueryForExistingTables := fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO \"%s\"", privileges, schema, roleName)
-			createGrantSeqQueryForFutureTables := fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT %s ON SEQUENCES TO \"%s\"", schema, privileges, roleName)
-			createGrantSeqQueryForExistingTables := fmt.Sprintf("GRANT %s ON ALL SEQUENCES IN SCHEMA %s TO \"%s\"", privileges, schema, roleName)
-
-			createGrantQuery = strings.Join([]string{createGrantQueryForFutureTables, createGrantQueryForExistingTables, createGrantSeqQueryForFutureTables, createGrantSeqQueryForExistingTables}, "; ")
+			sequencePrivileges := utility.GenerateSequencePrivileges(privileges)
+			createGrantSeqQueryForFutureTables := fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT %s ON SEQUENCES TO \"%s\"", schema, sequencePrivileges, roleName)
+			createGrantSeqQueryForExistingTables := fmt.Sprintf("GRANT %s ON ALL SEQUENCES IN SCHEMA %s TO \"%s\"", sequencePrivileges, schema, roleName)
+			if strings.Compare(sequencePrivileges, "") == 0 {
+				createGrantQuery = strings.Join([]string{createGrantQueryForFutureTables, createGrantQueryForExistingTables}, "; ")
+			} else {
+				createGrantQuery = strings.Join([]string{createGrantQueryForFutureTables, createGrantQueryForExistingTables, createGrantSeqQueryForFutureTables, createGrantSeqQueryForExistingTables}, "; ")
+			}
 		} else {
 			createGrantQuery = fmt.Sprintf("GRANT %s ON %s.%s TO \"%s\"", privileges, schema, table, roleName)
 		}
@@ -532,9 +537,14 @@ func (r *GrantReconciler) SyncGrant(ctx context.Context, grantType string, grant
 			// https://www.postgresql.org/docs/current/sql-alterdefaultprivileges.html
 			syncGrantQueryForFutureTables := fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT %s ON TABLES TO \"%s\"", schema, privileges, roleName)
 			syncGrantQueryForExistingTables := fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO \"%s\"", privileges, schema, roleName)
-			syncGrantSeqQueryForFutureTables := fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT %s ON SEQUENCES TO \"%s\"", schema, privileges, roleName)
-			syncGrantSeqQueryForExistingTables := fmt.Sprintf("GRANT %s ON ALL SEQUENCES IN SCHEMA %s TO \"%s\"", privileges, schema, roleName)
-			syncGrantQuery = strings.Join([]string{syncGrantQueryForFutureTables, syncGrantQueryForExistingTables, syncGrantSeqQueryForFutureTables, syncGrantSeqQueryForExistingTables}, "; ")
+			sequencePrivileges := utility.GenerateSequencePrivileges(privileges)
+			syncGrantSeqQueryForFutureTables := fmt.Sprintf("ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT %s ON SEQUENCES TO \"%s\"", schema, sequencePrivileges, roleName)
+			syncGrantSeqQueryForExistingTables := fmt.Sprintf("GRANT %s ON ALL SEQUENCES IN SCHEMA %s TO \"%s\"", sequencePrivileges, schema, roleName)
+			if strings.Compare(sequencePrivileges, "") == 0 {
+				syncGrantQuery = strings.Join([]string{syncGrantQueryForFutureTables, syncGrantQueryForExistingTables}, "; ")
+			} else {
+				syncGrantQuery = strings.Join([]string{syncGrantQueryForFutureTables, syncGrantQueryForExistingTables, syncGrantSeqQueryForFutureTables, syncGrantSeqQueryForExistingTables}, "; ")
+			}
 		} else {
 			syncGrantQuery = fmt.Sprintf("GRANT %s ON %s.%s TO \"%s\"", privileges, schema, table, roleName)
 		}
