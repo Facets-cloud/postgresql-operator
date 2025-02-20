@@ -30,4 +30,13 @@ resources:
   kind: Grant
   path: github.com/Facets-cloud/postgresql-operator/apis/postgresql/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: facets.cloud
+  group: postgresql
+  kind: GrantStatement
+  path: github.com/Facets-cloud/postgresql-operator/apis/postgresql/v1alpha1
+  version: v1alpha1
 version: "3"

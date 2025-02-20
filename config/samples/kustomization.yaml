@@ -2,4 +2,5 @@
 resources:
 - postgresql_v1alpha1_role.yaml
 - postgresql_v1alpha1_grant.yaml
+- postgresql_v1alpha1_grantstatement.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples
