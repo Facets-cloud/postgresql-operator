@@ -1,0 +1,34 @@
+apiVersion: postgresql.facets.cloud/v1alpha1
+kind: GrantStatement
+metadata:
+  labels:
+    app.kubernetes.io/name: test-grantstatement
+    app.kubernetes.io/instance: test-grantstatement
+    app.kubernetes.io/part-of: postgresql-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: postgresql-operator
+  name: test-grantstatement
+spec:
+  roleRef:
+    name: test-role
+    namespace: default
+  database: postgres
+  statements:
+    # Query to allow connect to db
+    - 'GRANT CONNECT ON DATABASE postgres TO "test-role";'
+    # Query to grant usage on schema public to role test-role
+    - 'GRANT USAGE ON SCHEMA public TO "test-role";'
+    # Query to grant all privileges on all tables in schema public to role test-role
+    - 'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "test-role";'
+    # Query to grant usage on all sequences in schema public to role test-role
+    - 'GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO "test-role";'
+    # Query to grant all on all functions in schema public to role test-role
+    - 'GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO "test-role";'
+    # Query to grant all privileges on all sequences in schema public to role test-role
+    - 'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "test-role";'
+    # Query to grant all privileges on all tables that will be created in schema public to role test-role
+    - 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "test-role";'
+    # Query to grant all privileges on all sequences that will be created in schema public to role test-role
+    - 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "test-role";'
+    # Query to grant all privileges on all functions that will be created in schema public to role test-role
+    - 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO "test-role";'

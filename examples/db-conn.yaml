@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-conn
+data:
+  endpoint: amVnYmNsd2pyei1yZHMtcG9zdGdyZXMtdGVzdC13cml0ZXIuYzNkbTY4cHdtYzJ5LmV1LXdlc3QtMS5yZHMuYW1hem9uYXdzLmNvbQ==
+  username: cm9vdA==
+  password: bm1VTXRWMU0yR0FtTFk2UVR2MUc=
+  port:  NTQzMg==
+  role_password: dGVzdDEyMw==
+  database: cG9zdGdyZXM=

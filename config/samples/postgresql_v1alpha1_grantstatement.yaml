@@ -1,0 +1,20 @@
+apiVersion: postgresql.facets.cloud/v1alpha1
+kind: GrantStatement
+metadata:
+  labels:
+    app.kubernetes.io/name: grantstatement
+    app.kubernetes.io/instance: grantstatement-sample
+    app.kubernetes.io/part-of: postgresql-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: postgresql-operator
+  name: grantstatement-sample
+spec:
+  roleRef:
+    name: test-role
+    namespace: default
+  database: postgres
+  statements:
+    - 'GRANT CONNECT ON DATABASE postgres TO "test-role";'
+    - 'GRANT USAGE ON SCHEMA public TO "test-role";'
+    - 'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "test-role";'
+    - 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "test-role";'
