@@ -9,4 +9,12 @@ metadata:
     app.kubernetes.io/created-by: postgresql-operator
   name: grantstatement-sample
 spec:
-  # TODO(user): Add fields here
+  roleRef:
+    name: test-role
+    namespace: default
+  database: postgres
+  statements:
+    - 'GRANT CONNECT ON DATABASE postgres TO "test-role";'
+    - 'GRANT USAGE ON SCHEMA public TO "test-role";'
+    - 'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "test-role";'
+    - 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "test-role";'

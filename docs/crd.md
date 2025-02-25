@@ -11,6 +11,7 @@ Package v1alpha1 contains API Schema definitions for the postgresql v1alpha1 API
 ### Resource Types
 - [Grant](#grant)
 - [Role](#role)
+- [GrantStatement](#grantstatement)
 
 
 
@@ -101,6 +102,32 @@ _Appears in:_
 | `privileges` _[RolePrivilege](#roleprivilege)_                | Privileges to be granted.                                                                          |
 
 
+#### GrantStatement
+
+
+
+GrantStatement is the Schema for the grantstatement API
+
+
+| Field                                                                                                              | Description                                                     |
+| ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| `apiVersion` _string_                                                                                              | `postgresql.facets.cloud/v1alpha1`                              |
+| `kind` _string_                                                                                                    | `GrantStatement`                                                |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.23/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |
+| `spec` _[GrantStatementSpec](#rolespec)_                                                                           |                                                                 |
+
+#### GrantStatementSpec
+
+GrantStatementSpec defines the desired state of GrantStatement
+
+| Field                                               | Description                                                 |
+| --------------------------------------------------- | ----------------------------------------------------------- |
+| `roleRef` _[ResourceReference](#resourcereference)_ | Defines the role reference to grant permissions             |
+| `statements` _string array_                         | Defines the list of grant queries to be executed for a role |
+| `database` _string_                                 | Defines the Database to execute grant queries for a role    |
+
+
+
 #### ResourceReference
 
 The Database Connection details secret selector
@@ -108,6 +135,7 @@ The Database Connection details secret selector
 _Appears in:_
 - [Role](#role)
 - [Grant](#Grant)
+- [GrantStatement](#GrantStatement)
 
 | Field       | Description                                                                                                            |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------- |

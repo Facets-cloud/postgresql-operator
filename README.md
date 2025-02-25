@@ -15,12 +15,18 @@ This guide provides an introduction to using the PostgreSQL Operator. It will he
 - You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.
 **Note:** Your controller will automatically use the current context in your kubeconfig file (i.e. whatever cluster `kubectl cluster-info` shows).
 - A kubernetes secret that contains base64 encrypted PostgreSQL Database details `username`, `password`, `endpoint`, `port`, `database` and `role_password`
-  > _Note:_
-  > - You can use existing secret with database details and role password
-  > - You can new secret with database details and role password
-  > - You can also created two separate secret for database details and role password
 
-  - Create a secret that contains both the database details and the role password. You have the flexibility to choose your own name for the key representing the role password, as long as you reference it correctly in the Role CRD.
+> [!NOTE] 
+> - You can use existing secret with database details and role password
+> - You can new secret with database details and role password
+> - You can also created two separate secret for database details and role password
+
+> [!CAUTION]
+> - For granting permissions to a specific role, you should utilize either the Grant or GrantStatement Custom Resource Definition — but not both concurrently. Using both might lead to conflicts or unexpected behavior. 
+> - For managing role permissions through the GrantStatement Custom Resource Definition on any database, ensure that no additional permissions are assigned outside the CRD manually. Any such additional permissions will be revoked when the CRD gets updated.
+> - Please note that you should not use any PostgreSQL GRANT query for a different database in a GrantStatement Custom Resource Definition that is specifically related to one database. If you do, the role cleanup process may not be successful.
+
+- Create a secret that contains both the database details and the role password. You have the flexibility to choose your own name for the key representing the role password, as long as you reference it correctly in the Role CRD.
 
     ```bash
     kubectl create secret generic <secret_name> --from-literal=username=<postgresql_username> --from-literal=password=<postgresql_password> --from-literal=endpoint=<postgresql_endpoint> --from-literal=port=<postgresql_port> --from-literal=database=<postgresql_database> --from-literal=role_password=<postgresql_role_password>
@@ -74,6 +80,24 @@ spec:
   schema: public
   table: ALL
 ```
+
+#### Example GrantStatement CRD
+````yaml
+apiVersion: postgresql.facets.cloud/v1alpha1
+kind: GrantStatement
+metadata:
+  name: test-grantstatement
+spec:
+  roleRef:
+    name: test-role
+    namespace: default
+  database: postgres
+  statements:
+    - 'GRANT CONNECT ON DATABASE postgres TO "test-role";'
+    - 'GRANT USAGE ON SCHEMA public TO "test-role";'
+    - 'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "test-role";'
+    - 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "test-role";'
+````
 
 For more examples, kindly check [here](examples)
 
