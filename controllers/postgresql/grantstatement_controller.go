@@ -241,11 +241,6 @@ func (r *GrantStatementReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: reconcileTime}, nil
 	}
 
-	// Update the previous state in the status
-	grantStatement.Status.PreviousGrantStatementState.Database = grantStatement.Spec.Database
-	grantStatement.Status.PreviousGrantStatementState.RoleRef = grantStatement.Spec.RoleRef
-	grantStatement.Status.PreviousGrantStatementState.Statements = grantStatement.Spec.Statements
-
 	r.appendGrantStatementStatusCondition(ctx, grantStatement, SUCCESS, metav1.ConditionTrue, GRANTSTATEMENT_EXECUTED, "Successfully executed grant statements")
 	logger.Info(fmt.Sprintf("Successfully executed grant statements for GrantStatement %s", grantStatement.Name))
 
@@ -375,6 +370,10 @@ func (r *GrantStatementReconciler) appendGrantStatementStatusCondition(ctx conte
 	if len(grantStatement.Status.Conditions) > 5 {
 		grantStatement.Status.Conditions = grantStatement.Status.Conditions[len(grantStatement.Status.Conditions)-5:]
 	}
+	// update previous state in the status
+	grantStatement.Status.PreviousGrantStatementState.Database = grantStatement.Spec.Database
+	grantStatement.Status.PreviousGrantStatementState.RoleRef = grantStatement.Spec.RoleRef
+	grantStatement.Status.PreviousGrantStatementState.Statements = grantStatement.Spec.Statements
 	err := r.Status().Update(ctx, grantStatement)
 	if err != nil {
 		logger.Error(err, fmt.Sprintf("Resource status update failed for GrantStatement %s", grantStatement.Name))
