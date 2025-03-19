@@ -27,8 +27,8 @@ spec:
     # Query to grant all privileges on all sequences in schema public to role test-role
     - 'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "test-role";'
     # Query to grant all privileges on all tables that will be created in schema public to role test-role
-    - 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "test-role";'
+    - 'ALTER DEFAULT PRIVILEGES FOR ROLE "test-role" IN SCHEMA public GRANT ALL ON TABLES TO "test-role";'
     # Query to grant all privileges on all sequences that will be created in schema public to role test-role
-    - 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "test-role";'
+    - 'ALTER DEFAULT PRIVILEGES FOR ROLE "test-role" IN SCHEMA public GRANT ALL ON SEQUENCES TO "test-role";'
     # Query to grant all privileges on all functions that will be created in schema public to role test-role
-    - 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO "test-role";'
+    - 'ALTER DEFAULT PRIVILEGES FOR ROLE "test-role" IN SCHEMA public GRANT ALL ON FUNCTIONS TO "test-role";'
