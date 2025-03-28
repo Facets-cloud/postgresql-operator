@@ -354,9 +354,29 @@ func (r *RoleReconciler) DeletRole(ctx context.Context, role *v1alpha1.Role) (st
 }
 
 func (r *RoleReconciler) SyncRole(ctx context.Context, role *postgresql.Role, rolePassword string, isPasswordSync bool) (string, metav1.ConditionStatus, string, string) {
-	privileges := strings.Join(PrivilegesToClauses(role.Spec.Privileges), " ")
+	privileges := PrivilegesToClauses(role.Spec.Privileges)
 
-	alterRoleQuery := fmt.Sprintf("ALTER ROLE \"%s\" WITH %s PASSWORD '%s' CONNECTION LIMIT %d", role.Name, privileges, rolePassword, *role.Spec.ConnectionLimit)
+	// Remove SUPERUSER and REPLICATION clauses if not explicitly required
+	privilegesToCheck := []struct {
+		enabled *bool
+		keyword string
+	}{
+		{role.Spec.Privileges.SuperUser, "SUPERUSER"},
+		{role.Spec.Privileges.Replication, "REPLICATION"},
+	}
+
+	for _, check := range privilegesToCheck {
+		if check.enabled == nil || !*check.enabled {
+			for i, clause := range privileges {
+				if strings.Contains(clause, check.keyword) {
+					privileges = append(privileges[:i], privileges[i+1:]...)
+					break
+				}
+			}
+		}
+	}
+
+	alterRoleQuery := fmt.Sprintf("ALTER ROLE \"%s\" WITH %s PASSWORD '%s' CONNECTION LIMIT %d", role.Name, strings.Join(privileges, " "), rolePassword, *role.Spec.ConnectionLimit)
 	_, err := roleDB.Exec(alterRoleQuery)
 	if err != nil {
 		if strings.Contains(err.Error(), fmt.Sprintf("pq: role \"%s\" does not exist", role.Name)) {
