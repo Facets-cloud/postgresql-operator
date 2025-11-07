@@ -1,0 +1,28 @@
+apiVersion: postgresql.facets.cloud/v1alpha1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/name: role
+    app.kubernetes.io/instance: role-example-with-override
+    app.kubernetes.io/part-of: postgresql-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: postgresql-operator
+  name: role-example-with-override
+spec:
+  connectSecretRef:
+    name: db-conn
+    namespace: default
+  passwordSecretRef:
+    namespace: default
+    name: db-conn
+    key: role_password
+  userNameOverride: "_"
+  connectionLimit: 100
+  privileges:
+    bypassRls: false
+    createDb: false
+    createRole: false
+    inherit: false
+    login: true
+    replication: false
+    superUser: false

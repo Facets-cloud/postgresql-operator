@@ -128,6 +128,11 @@ spec:
                     description: SuperUser grants SUPERUSER privilege when true.
                     type: boolean
                 type: object
+              userNameOverride:
+                description: UserNameOverride allows specifying a custom username
+                  for the PostgreSQL role. When set, this takes precedence over the
+                  role name from the CRD metadata.
+                type: string
             type: object
           status:
             description: RoleStatus defines the observed state of Role

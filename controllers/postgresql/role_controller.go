@@ -79,6 +79,15 @@ type RoleReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+// getEffectiveRoleName returns the PostgreSQL role name to use.
+// If UserNameOverride is set, it takes precedence over the CRD name.
+func getEffectiveRoleName(role *postgresql.Role) string {
+	if role.Spec.UserNameOverride != nil && *role.Spec.UserNameOverride != "" {
+		return *role.Spec.UserNameOverride
+	}
+	return role.Name
+}
+
 //+kubebuilder:rbac:groups=postgresql.facets.cloud,resources=roles,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=postgresql.facets.cloud,resources=roles/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=postgresql.facets.cloud,resources=roles/finalizers,verbs=update
@@ -179,7 +188,7 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	defaultDatabase := string(connectionSecret.Data[common.ResourceCredentialsSecretDatabaseKey])
 	roleDB, err = common.ConnectToPostgres(connectionSecret, defaultDatabase)
 	if err != nil {
-		reason := fmt.Sprintf("Failed connecting to database for role `%s`", role.Name)
+		reason := fmt.Sprintf("Failed connecting to database for role `%s`", getEffectiveRoleName(role))
 		roleLogger.Error(err, reason)
 		r.appendRoleStatusCondition(ctx, role, common.FAIL, metav1.ConditionFalse, common.CONNECTIONFAILED, err.Error())
 	}
@@ -325,31 +334,31 @@ func (r *RoleReconciler) findObjectsForSecret(secret client.Object) []reconcile.
 
 func (r *RoleReconciler) CreateRole(ctx context.Context, role *postgresql.Role, rolePassword string) (string, metav1.ConditionStatus, string, string) {
 	privileges := strings.Join(PrivilegesToClauses(role.Spec.Privileges), " ")
-	createRoleQuery := fmt.Sprintf("CREATE ROLE \"%s\" WITH %s PASSWORD '%s' CONNECTION LIMIT %d", role.Name, privileges, rolePassword, *role.Spec.ConnectionLimit)
+	createRoleQuery := fmt.Sprintf("CREATE ROLE \"%s\" WITH %s PASSWORD '%s' CONNECTION LIMIT %d", getEffectiveRoleName(role), privileges, rolePassword, *role.Spec.ConnectionLimit)
 	_, err := roleDB.Exec(createRoleQuery)
 	if err != nil {
-		if strings.Contains(err.Error(), fmt.Sprintf("pq: role \"%s\" already exists", role.Name)) {
-			roleLogger.Error(err, fmt.Sprintf("Role `%s` created outside of database operator.", role.Name))
+		if strings.Contains(err.Error(), fmt.Sprintf("pq: role \"%s\" already exists", getEffectiveRoleName(role))) {
+			roleLogger.Error(err, fmt.Sprintf("Role `%s` created outside of database operator.", getEffectiveRoleName(role)))
 			return common.FAIL, metav1.ConditionFalse, ROLECREATEFAILED, errRoleCreatedOutside
 		} else {
-			roleLogger.Error(err, fmt.Sprintf("Failed to create role `%s`, Check if the secret `%s/%s` has valid database connection details", role.Name, role.Spec.ConnectSecretRef.Namespace, role.Spec.ConnectSecretRef.Name))
+			roleLogger.Error(err, fmt.Sprintf("Failed to create role `%s`, Check if the secret `%s/%s` has valid database connection details", getEffectiveRoleName(role), role.Spec.ConnectSecretRef.Namespace, role.Spec.ConnectSecretRef.Name))
 			return common.FAIL, metav1.ConditionFalse, ROLECREATEFAILED, fmt.Sprintf("%s, Check if the secret `%s/%s` has valid database connection details", err.Error(), role.Spec.ConnectSecretRef.Namespace, role.Spec.ConnectSecretRef.Name)
 		}
 	}
 
-	roleLogger.Info(fmt.Sprintf("Role `%s` got created successfully", role.Name))
+	roleLogger.Info(fmt.Sprintf("Role `%s` got created successfully", getEffectiveRoleName(role)))
 	return common.CREATE, metav1.ConditionTrue, ROLECREATED, "Role created successfully"
 }
 
 func (r *RoleReconciler) DeletRole(ctx context.Context, role *v1alpha1.Role) (string, metav1.ConditionStatus, string, string, error) {
-	deleteRoleQuery := fmt.Sprintf("DROP ROLE IF EXISTS \"%s\"", role.Name)
+	deleteRoleQuery := fmt.Sprintf("DROP ROLE IF EXISTS \"%s\"", getEffectiveRoleName(role))
 	_, err := roleDB.Exec(deleteRoleQuery)
 	if err != nil {
-		roleLogger.Error(err, fmt.Sprintf("Failed to delete role `%s`", role.Name))
+		roleLogger.Error(err, fmt.Sprintf("Failed to delete role `%s`", getEffectiveRoleName(role)))
 		return common.FAIL, metav1.ConditionFalse, ROLEDELETEFAILED, err.Error(), err
 	}
 
-	roleLogger.Info(fmt.Sprintf("Role `%s` got deleted successfully", role.Name))
+	roleLogger.Info(fmt.Sprintf("Role `%s` got deleted successfully", getEffectiveRoleName(role)))
 	return common.DELETE, metav1.ConditionTrue, ROLEDELETED, "Role deleted successfully", err
 }
 
@@ -376,23 +385,23 @@ func (r *RoleReconciler) SyncRole(ctx context.Context, role *postgresql.Role, ro
 		}
 	}
 
-	alterRoleQuery := fmt.Sprintf("ALTER ROLE \"%s\" WITH %s PASSWORD '%s' CONNECTION LIMIT %d", role.Name, strings.Join(privileges, " "), rolePassword, *role.Spec.ConnectionLimit)
+	alterRoleQuery := fmt.Sprintf("ALTER ROLE \"%s\" WITH %s PASSWORD '%s' CONNECTION LIMIT %d", getEffectiveRoleName(role), strings.Join(privileges, " "), rolePassword, *role.Spec.ConnectionLimit)
 	_, err := roleDB.Exec(alterRoleQuery)
 	if err != nil {
-		if strings.Contains(err.Error(), fmt.Sprintf("pq: role \"%s\" does not exist", role.Name)) {
-			roleLogger.Error(err, fmt.Sprintf("Failed to sync role `%s`. Role deleted outside of database operator ", role.Name))
+		if strings.Contains(err.Error(), fmt.Sprintf("pq: role \"%s\" does not exist", getEffectiveRoleName(role))) {
+			roleLogger.Error(err, fmt.Sprintf("Failed to sync role `%s`. Role deleted outside of database operator ", getEffectiveRoleName(role)))
 			return common.SYNC, metav1.ConditionFalse, ROLESYNCFAILED, errRoleDeletedOutside
 		} else {
-			roleLogger.Error(err, fmt.Sprintf("Failed to sync role `%s`", role.Name))
+			roleLogger.Error(err, fmt.Sprintf("Failed to sync role `%s`", getEffectiveRoleName(role)))
 			return common.SYNC, metav1.ConditionFalse, ROLESYNCFAILED, err.Error()
 		}
 	}
 
 	if isPasswordSync {
-		roleLogger.Info(fmt.Sprintf("Role `%s` password got synced successfully", role.Name))
+		roleLogger.Info(fmt.Sprintf("Role `%s` password got synced successfully", getEffectiveRoleName(role)))
 		return common.SYNC, metav1.ConditionTrue, ROLEPASSWORDSYNCED, "Role password synced successfully"
 	}
-	roleLogger.Info(fmt.Sprintf("Role `%s` got synced successfully", role.Name))
+	roleLogger.Info(fmt.Sprintf("Role `%s` got synced successfully", getEffectiveRoleName(role)))
 	return common.SYNC, metav1.ConditionTrue, ROLESYNCED, "Role synced successfully"
 }
 
@@ -411,7 +420,7 @@ func (r *RoleReconciler) ObserveRoleState(ctx context.Context, role *postgresql.
 
 	err := roleDB.QueryRow(
 		observeRoleStateQuery,
-		role.Name,
+		getEffectiveRoleName(role),
 		&role.Spec.Privileges.SuperUser,
 		&role.Spec.Privileges.Inherit,
 		&role.Spec.Privileges.CreateRole,
@@ -422,7 +431,7 @@ func (r *RoleReconciler) ObserveRoleState(ctx context.Context, role *postgresql.
 		&role.Spec.Privileges.BypassRls,
 	).Scan(&isRoleStateChanged)
 	if err != nil {
-		roleLogger.Error(err, fmt.Sprintf("Failed to get role `%s` when observing ", role.Name))
+		roleLogger.Error(err, fmt.Sprintf("Failed to get role `%s` when observing ", getEffectiveRoleName(role)))
 		r.appendRoleStatusCondition(ctx, role, common.FAIL, metav1.ConditionFalse, ROLEGETFAILED, err.Error())
 	}
 	return isRoleStateChanged

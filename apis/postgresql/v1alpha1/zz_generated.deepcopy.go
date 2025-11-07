@@ -402,6 +402,11 @@ func (in *RoleSpec) DeepCopyInto(out *RoleSpec) {
 	*out = *in
 	out.ConnectSecretRef = in.ConnectSecretRef
 	out.PasswordSecretRef = in.PasswordSecretRef
+	if in.UserNameOverride != nil {
+		in, out := &in.UserNameOverride, &out.UserNameOverride
+		*out = new(string)
+		**out = **in
+	}
 	if in.ConnectionLimit != nil {
 		in, out := &in.ConnectionLimit, &out.ConnectionLimit
 		*out = new(int32)

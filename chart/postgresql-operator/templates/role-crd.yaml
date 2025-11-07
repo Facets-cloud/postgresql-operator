@@ -1,3 +1,4 @@
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -54,8 +55,8 @@ spec:
             description: RoleSpec defines the desired state of Role
             properties:
               connectSecretRef:
-                description: ConnectSecretRef references the secret that contains database
-                  details () used to create this role.
+                description: ConnectSecretRef references the secret that contains
+                  database details () used to create this role.
                 properties:
                   name:
                     description: Name of the resource.
@@ -73,8 +74,8 @@ spec:
                 format: int32
                 type: integer
               passwordSecretRef:
-                description: PasswordSecretRef references the secret that contains the
-                  password used for this role.
+                description: PasswordSecretRef references the secret that contains
+                  the password used for this role.
                 properties:
                   key:
                     description: The key to select.
@@ -100,13 +101,13 @@ spec:
                     type: boolean
                   createDb:
                     default: false
-                    description: CreateDb grants CREATEDB when true, allowing the role
-                      to create databases.
+                    description: CreateDb grants CREATEDB when true, allowing the
+                      role to create databases.
                     type: boolean
                   createRole:
                     default: false
-                    description: CreateRole grants CREATEROLE when true, allowing this
-                      role to create other roles.
+                    description: CreateRole grants CREATEROLE when true, allowing
+                      this role to create other roles.
                     type: boolean
                   inherit:
                     default: false
@@ -128,6 +129,11 @@ spec:
                     description: SuperUser grants SUPERUSER privilege when true.
                     type: boolean
                 type: object
+              userNameOverride:
+                description: UserNameOverride allows specifying a custom username
+                  for the PostgreSQL role. When set, this takes precedence over the
+                  role name from the CRD metadata.
+                type: string
             type: object
           status:
             description: RoleStatus defines the observed state of Role
@@ -137,8 +143,8 @@ spec:
                   description: "Condition contains details for one aspect of the current
                     state of this API Resource. --- This struct is intended for direct
                     use as an array at the field path .status.conditions.  For example,
-                    \n type FooStatus struct{ // Represents the observations of a foo's
-                    current state. // Known .status.conditions.type are: \"Available\",
+                    \n type FooStatus struct{ // Represents the observations of a
+                    foo's current state. // Known .status.conditions.type are: \"Available\",
                     \"Progressing\", and \"Degraded\" // +patchMergeKey=type // +patchStrategy=merge
                     // +listType=map // +listMapKey=type Conditions []metav1.Condition
                     `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\"
@@ -152,8 +158,8 @@ spec:
                       format: date-time
                       type: string
                     message:
-                      description: message is a human readable message indicating details
-                        about the transition. This may be an empty string.
+                      description: message is a human readable message indicating
+                        details about the transition. This may be an empty string.
                       maxLength: 32768
                       type: string
                     observedGeneration:
@@ -167,11 +173,11 @@ spec:
                       type: integer
                     reason:
                       description: reason contains a programmatic identifier indicating
-                        the reason for the condition's last transition. Producers of
-                        specific condition types may define expected values and meanings
-                        for this field, and whether the values are considered a guaranteed
-                        API. The value should be a CamelCase string. This field may
-                        not be empty.
+                        the reason for the condition's last transition. Producers
+                        of specific condition types may define expected values and
+                        meanings for this field, and whether the values are considered
+                        a guaranteed API. The value should be a CamelCase string.
+                        This field may not be empty.
                       maxLength: 1024
                       minLength: 1
                       pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
