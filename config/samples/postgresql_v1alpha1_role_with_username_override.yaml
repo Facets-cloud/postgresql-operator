@@ -16,7 +16,7 @@ spec:
     namespace: default
     name: db-conn
     key: role_password
-  userNameOverride: "_"
+  userNameOverride: "test_user"
   connectionLimit: 100
   privileges:
     bypassRls: false
