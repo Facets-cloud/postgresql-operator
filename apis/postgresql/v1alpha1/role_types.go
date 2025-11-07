@@ -74,6 +74,11 @@ type RoleSpec struct {
 	// +kubebuilder:validation:Required
 	PasswordSecretRef common.SecretKeySelector `json:"passwordSecretRef,omitempty"`
 
+	// UserNameOverride allows specifying a custom username for the PostgreSQL role.
+	// When set, this takes precedence over the role name from the CRD metadata.
+	// +optional
+	UserNameOverride *string `json:"userNameOverride,omitempty"`
+
 	// ConnectionLimit to be applied to the role.
 	// +kubebuilder:validation:Min=-1
 	// +optional

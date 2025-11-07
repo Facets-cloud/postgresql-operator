@@ -205,7 +205,7 @@ func (r *GrantStatementReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 
 		// Revoke all privileges from the role before granting new privileges
-		err, message = r.revokeAllPrivileges(grantStatement, prevDatabase, prevRoleRef, secret)
+		err, message = r.revokeAllPrivileges(ctx, grantStatement, prevDatabase, prevRoleRef, secret)
 		if err != nil {
 			message := fmt.Sprintf("Failed to revoke all privileges for GrantStatement %s/%s: %s", grantStatement.Namespace, grantStatement.Name, message)
 			r.appendGrantStatementStatusCondition(ctx, grantStatement, common.FAIL, metav1.ConditionFalse, common.FAIL, fmt.Sprintf("%s: %s", message, err.Error()))
@@ -257,7 +257,7 @@ func (r *GrantStatementReconciler) finalizeGrantStatement(ctx context.Context, g
 		logger.Error(err, message)
 		return fmt.Errorf("failed to retrieve secret from current state for GrantStatement %s/%s: %s", grantStatement.Namespace, grantStatement.Name, err.Error())
 	}
-	err, message = r.revokeAllPrivileges(grantStatement, database, roleRef, secret)
+	err, message = r.revokeAllPrivileges(ctx, grantStatement, database, roleRef, secret)
 	if err != nil {
 		r.appendGrantStatementStatusCondition(ctx, grantStatement, common.FAIL, metav1.ConditionFalse, common.FAIL, err.Error())
 		logger.Error(err, message)
@@ -268,7 +268,7 @@ func (r *GrantStatementReconciler) finalizeGrantStatement(ctx context.Context, g
 	return nil
 }
 
-func (r *GrantStatementReconciler) revokeAllPrivileges(grantStatement *postgresqlv1alpha1.GrantStatement, database string, roleRef common.ResourceReference, secret *corev1.Secret) (error, string) {
+func (r *GrantStatementReconciler) revokeAllPrivileges(ctx context.Context, grantStatement *postgresqlv1alpha1.GrantStatement, database string, roleRef common.ResourceReference, secret *corev1.Secret) (error, string) {
 	var message string
 	db, err := common.ConnectToPostgres(secret, database)
 	if err != nil {
@@ -298,7 +298,20 @@ func (r *GrantStatementReconciler) revokeAllPrivileges(grantStatement *postgresq
 		schemas = append(schemas, schema)
 	}
 
-	role := fmt.Sprintf("\"%s\"", roleRef.Name)
+	// Get the Role object to access UserNameOverride
+	roleObj := &postgresqlv1alpha1.Role{}
+	err = r.Get(ctx, types.NamespacedName{
+		Namespace: roleRef.Namespace,
+		Name:      roleRef.Name,
+	}, roleObj)
+	if err != nil {
+		message = fmt.Sprintf("Failed to get role resource %s/%s for GrantStatement %s", roleRef.Namespace, roleRef.Name, grantStatement.Name)
+		logger.Error(err, message)
+		return err, message
+	}
+
+	effectiveRoleName := getEffectiveRoleName(roleObj)
+	role := fmt.Sprintf("\"%s\"", effectiveRoleName)
 	rootUser := string(secret.Data[common.ResourceCredentialsSecretUserKey])
 
 	// For each schema, execute each SQL command to revoke all privileges as a separate transaction
