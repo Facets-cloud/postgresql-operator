@@ -481,7 +481,7 @@ func (r *RoleReconciler) appendRoleStatusCondition(ctx context.Context, role *po
 
 		getLastItem := roleStatusConditions[len(roleStatusConditions)-1]
 		if getLastItem.Reason != condition.Reason {
-			role.Status.Conditions = append(role.Status.Conditions, condition)
+			role.Status.Conditions = append(roleStatusConditions, condition)
 			err := r.Status().Update(ctx, role)
 			if err != nil {
 				roleLogger.Error(err, fmt.Sprintf("Resource status update failed for role `%s`", role.Name))
