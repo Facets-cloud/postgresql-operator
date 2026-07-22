@@ -63,6 +63,13 @@ var (
 type GrantStatementReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	// APIReader bypasses the manager's cache. The skip-if-unchanged check below
+	// must never evaluate against a status the cache hasn't caught up on yet -
+	// otherwise a reconcile that just ran REVOKE ALL can be immediately followed
+	// by another reconcile that reads the pre-revoke cached status, wrongly
+	// concludes nothing changed, and skips re-granting, leaving the role with
+	// no privileges. Reading the object live here closes that race.
+	APIReader client.Reader
 }
 
 //+kubebuilder:rbac:groups=postgresql.facets.cloud,resources=grantstatements,verbs=get;list;watch;create;update;patch;delete
@@ -84,9 +91,14 @@ func (r *GrantStatementReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		panic(err)
 	}
 
-	// get grantstatement resource
+	// get grantstatement resource - read live (not from the cache) since the
+	// skip-if-unchanged decision below depends on this object's latest status
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
 	grantStatement := &postgresqlv1alpha1.GrantStatement{}
-	err = r.Get(ctx, req.NamespacedName, grantStatement)
+	err = reader.Get(ctx, req.NamespacedName, grantStatement)
 	if err != nil {
 		return ctrl.Result{}, nil
 	}
